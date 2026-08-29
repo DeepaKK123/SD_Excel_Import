@@ -1,0 +1,76 @@
+SUBROUTINE SR.IMPORT.SUMMARY.PRINT(DATA.FILE, ERR.MSG)
+*=============================================================================
+* SR.IMPORT.SUMMARY.PRINT
+*
+* Purpose:
+*   Reusable summary renderer for current/prior load status from IMPORT.CONTROL.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   EQU CONTROL.FILE TO 'IMPORT.CONTROL'
+
+   ERR.MSG = ''
+
+   OPEN CONTROL.FILE TO F.CONTROL ELSE
+      ERR.MSG = 'No control file found: ' : CONTROL.FILE
+      RETURN
+   END
+
+   READ CONTROL.REC FROM F.CONTROL, DATA.FILE ELSE
+      ERR.MSG = 'No load history found for: ' : DATA.FILE
+      CLOSE F.CONTROL
+      RETURN
+   END
+
+   CURR.SKIPPED.VALUE = CONTROL.REC<CTRL.CURR.SKIPPED>
+   IF CURR.SKIPPED.VALUE = '' THEN CURR.SKIPPED.VALUE = CONTROL.REC<CTRL.CURR.SKIPPED.LEGACY>
+   PRIOR.SKIPPED.VALUE = CONTROL.REC<CTRL.PRIOR.SKIPPED>
+   IF PRIOR.SKIPPED.VALUE = '' THEN PRIOR.SKIPPED.VALUE = CONTROL.REC<CTRL.PRIOR.SKIPPED.LEGACY>
+
+   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.CURR.SRC.DIR>, CONTROL.REC<CTRL.CURR.DIFFPATH>, CURR.DIFF.FULL)
+   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.CURR.SRC.DIR>, CONTROL.REC<CTRL.CURR.CHANGE.LOG>, CURR.LOG.FULL)
+   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.PRIOR.SRC.DIR>, CONTROL.REC<CTRL.PRIOR.DIFFPATH>, PRIOR.DIFF.FULL)
+   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.PRIOR.SRC.DIR>, CONTROL.REC<CTRL.PRIOR.CHANGE.LOG>, PRIOR.LOG.FULL)
+
+   CRT
+   CRT 'Current Load'
+   CRT '  Type       : ' : CONTROL.REC<CTRL.CURR.TYPE>
+   CRT '  Date       : ' : OCONV(CONTROL.REC<CTRL.CURR.DATE>, 'D4/')
+   CRT '  Time       : ' : OCONV(CONTROL.REC<CTRL.CURR.TIME>, 'MTS')
+   CRT '  User       : ' : CONTROL.REC<CTRL.CURR.ACCOUNT>
+   CRT '  Source dir : ' : CONTROL.REC<CTRL.CURR.SRC.DIR>
+   CRT '  Source file: ' : CONTROL.REC<CTRL.CURR.SRC.NAME>
+   CRT '  # Records  : ' : CONTROL.REC<CTRL.CURR.COUNT>
+   CRT '  Added      : ' : CONTROL.REC<CTRL.CURR.ADDED>
+   CRT '  Changed    : ' : CONTROL.REC<CTRL.CURR.CHANGED>
+   CRT '  Skipped    : ' : CURR.SKIPPED.VALUE
+   CRT '  Deleted    : ' : CONTROL.REC<CTRL.CURR.DELETED>
+   CRT '  Diff report: ' : CURR.DIFF.FULL
+   CRT '  Change log : ' : CURR.LOG.FULL
+
+   CRT
+   CRT 'Prior Load'
+   IF CONTROL.REC<CTRL.PRIOR.TYPE> = '' THEN
+      CRT '  No prior load recorded.'
+   END ELSE
+      CRT '  Type       : ' : CONTROL.REC<CTRL.PRIOR.TYPE>
+      CRT '  Date       : ' : OCONV(CONTROL.REC<CTRL.PRIOR.DATE>, 'D4/')
+      CRT '  Time       : ' : OCONV(CONTROL.REC<CTRL.PRIOR.TIME>, 'MTS')
+      CRT '  User       : ' : CONTROL.REC<CTRL.PRIOR.ACCOUNT>
+      CRT '  Source dir : ' : CONTROL.REC<CTRL.PRIOR.SRC.DIR>
+      CRT '  Source file: ' : CONTROL.REC<CTRL.PRIOR.SRC.NAME>
+      CRT '  # Records  : ' : CONTROL.REC<CTRL.PRIOR.COUNT>
+      CRT '  Added      : ' : CONTROL.REC<CTRL.PRIOR.ADDED>
+      CRT '  Changed    : ' : CONTROL.REC<CTRL.PRIOR.CHANGED>
+      CRT '  Skipped    : ' : PRIOR.SKIPPED.VALUE
+      CRT '  Deleted    : ' : CONTROL.REC<CTRL.PRIOR.DELETED>
+      CRT '  Diff report: ' : PRIOR.DIFF.FULL
+      CRT '  Change log : ' : PRIOR.LOG.FULL
+   END
+
+   CLOSE F.CONTROL
+   RETURN
+*=============================================================================
+END

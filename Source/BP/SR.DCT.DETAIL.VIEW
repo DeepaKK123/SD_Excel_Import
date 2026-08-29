@@ -1,0 +1,212 @@
+SUBROUTINE SR.DCT.DETAIL.VIEW(DATA.FILE, ERR.MSG)
+*=============================================================================
+* SR.DCT.DETAIL.VIEW
+*
+* Purpose:
+*   Reusable detailed change-log viewer for a target MV file.
+*   Reads current change-log path from IMPORT.CONTROL and renders
+*   summary + drill-down details.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   EQU CONTROL.FILE TO 'IMPORT.CONTROL'
+   EQU AUDIT.FILE   TO 'IMPORT.DCT.AUDIT'
+
+   ERR.MSG = ''
+   DATA.FILE = TRIM(CHANGE(DATA.FILE, CHAR(13), ''))
+   IF DATA.FILE = '' THEN
+      ERR.MSG = 'Target MV file is required.'
+      RETURN
+   END
+
+   OPEN CONTROL.FILE TO F.CONTROL ELSE
+      ERR.MSG = 'Cannot open control file: ' : CONTROL.FILE
+      RETURN
+   END
+
+   READ CONTROL.REC FROM F.CONTROL, DATA.FILE ELSE
+      ERR.MSG = 'No import history found for: ' : DATA.FILE
+      CLOSE F.CONTROL
+      RETURN
+   END
+
+   LOG.FILE = CONTROL.REC<CTRL.CURR.CHANGE.LOG>
+   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.CURR.SRC.DIR>, LOG.FILE, LOG.PATH)
+   IF LOG.PATH = '' THEN
+      ERR.MSG = 'No detailed change log is recorded for the current run.'
+      CLOSE F.CONTROL
+      RETURN
+   END
+
+   CRT @(-1)
+   GOSUB DISPLAY.HEADER
+   OPENSEQ LOG.PATH TO F.LOG ELSE
+      ERR.MSG = 'Cannot open change log: ' : LOG.PATH
+      CLOSE F.CONTROL
+      RETURN
+   END
+
+   * Read the log once and group field changes by action and record ID.
+   READSEQ LOG.LINE FROM F.LOG ELSE LOG.LINE = ''
+   CHANGE.COUNT = 0
+   SUMMARY.COUNT = 0
+   SUMMARY.ACTION = ''
+   SUMMARY.RECORD = ''
+   SUMMARY.FIELDS = ''
+   DETAIL.NAME = ''
+   DETAIL.BEFORE = ''
+   DETAIL.AFTER = ''
+   IF LOG.LINE # '' THEN
+      LOOP
+         READSEQ LOG.LINE FROM F.LOG ELSE EXIT
+         ACTION = FIELD(LOG.LINE, ',', 4)
+         RECORD.ID = FIELD(LOG.LINE, ',', 5)
+         FIELD.NAME = FIELD(LOG.LINE, ',', 6)
+         BEFORE.VALUE = FIELD(LOG.LINE, ',', 7)
+         AFTER.VALUE = FIELD(LOG.LINE, ',', 8)
+
+         CHANGE.COUNT += 1
+         SUMMARY.NO = 0
+         FOR FIND.NO = 1 TO SUMMARY.COUNT
+            IF SUMMARY.ACTION<FIND.NO> = ACTION AND SUMMARY.RECORD<FIND.NO> = RECORD.ID THEN
+               SUMMARY.NO = FIND.NO
+               EXIT
+            END
+         NEXT FIND.NO
+         IF SUMMARY.NO = 0 THEN
+            SUMMARY.COUNT += 1
+            SUMMARY.NO = SUMMARY.COUNT
+            SUMMARY.ACTION<SUMMARY.NO> = ACTION
+            SUMMARY.RECORD<SUMMARY.NO> = RECORD.ID
+            SUMMARY.FIELDS<SUMMARY.NO> = 0
+         END
+         SUMMARY.FIELDS<SUMMARY.NO> += 1
+         FIELD.NO = SUMMARY.FIELDS<SUMMARY.NO>
+         IF FIELD.NO = 1 THEN
+            DETAIL.NAME<SUMMARY.NO> = FIELD.NAME
+            DETAIL.BEFORE<SUMMARY.NO> = BEFORE.VALUE
+            DETAIL.AFTER<SUMMARY.NO> = AFTER.VALUE
+         END ELSE
+            DETAIL.NAME<SUMMARY.NO> = DETAIL.NAME<SUMMARY.NO> : @VM : FIELD.NAME
+            DETAIL.BEFORE<SUMMARY.NO> = DETAIL.BEFORE<SUMMARY.NO> : @VM : BEFORE.VALUE
+            DETAIL.AFTER<SUMMARY.NO> = DETAIL.AFTER<SUMMARY.NO> : @VM : AFTER.VALUE
+         END
+      REPEAT
+   END
+   CLOSESEQ F.LOG
+
+   GOSUB DISPLAY.SUMMARY
+
+   IF SUMMARY.COUNT > 0 THEN
+      LOOP
+         CRT 'Enter summary number for details, or Q to quit: ':
+         INPUT DETAIL.SELECTION
+         DETAIL.SELECTION = UPCASE(TRIM(CHANGE(DETAIL.SELECTION, CHAR(13), '')))
+         IF DETAIL.SELECTION = 'Q' OR DETAIL.SELECTION = 'QUIT' THEN EXIT
+         IF NOT(NUM(DETAIL.SELECTION)) OR DETAIL.SELECTION < 1 OR DETAIL.SELECTION > SUMMARY.COUNT THEN
+            CRT 'Enter a valid summary number.'
+            CONTINUE
+         END
+
+         SUMMARY.NO = DETAIL.SELECTION
+         CRT @(-1)
+         GOSUB DISPLAY.HEADER
+         CRT
+         CRT 'Record Details'
+         CRT STR('-', 78)
+         CRT 'Action    : ' : SUMMARY.ACTION<SUMMARY.NO>
+         CRT 'Record ID : ' : SUMMARY.RECORD<SUMMARY.NO>
+         CRT
+         CRT 'Field                 Previous Value                 Current Value'
+         CRT STR('-', 78)
+         CRT
+         FOR FIELD.NO = 1 TO SUMMARY.FIELDS<SUMMARY.NO>
+            CRT FMT(FIELD(DETAIL.NAME<SUMMARY.NO>, @VM, FIELD.NO), 'L#22') : ' ' : FMT(FIELD(DETAIL.BEFORE<SUMMARY.NO>, @VM, FIELD.NO), 'L#30') : ' ' : FIELD(DETAIL.AFTER<SUMMARY.NO>, @VM, FIELD.NO)
+            CRT
+         NEXT FIELD.NO
+         CRT
+         CRT
+         CRT STR('-', 78)
+         CRT
+         CRT 'Press B to return to summary, or Q to quit: ':
+         INPUT DETAIL.ACTION
+         DETAIL.ACTION = UPCASE(TRIM(CHANGE(DETAIL.ACTION, CHAR(13), '')))
+         IF DETAIL.ACTION = 'Q' OR DETAIL.ACTION = 'QUIT' THEN EXIT
+         IF DETAIL.ACTION = 'B' OR DETAIL.ACTION = 'BACK' THEN
+            CRT @(-1)
+            GOSUB DISPLAY.HEADER
+            GOSUB DISPLAY.SUMMARY
+         END
+      REPEAT
+   END
+
+   CRT
+   CRT 'Confirm that this change report was reviewed? (Y/N): ':
+   INPUT CONFIRM.ANSWER
+   CONFIRM.ANSWER = UPCASE(TRIM(CHANGE(CONFIRM.ANSWER, CHAR(13), '')))
+   IF CONFIRM.ANSWER # 'Y' AND CONFIRM.ANSWER # 'N' THEN
+      ERR.MSG = 'Please enter Y or N.'
+      CLOSE F.CONTROL
+      RETURN
+   END
+
+   OPEN AUDIT.FILE TO F.AUDIT ELSE
+      EXECUTE 'CREATE.FILE ' : AUDIT.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN AUDIT.FILE TO F.AUDIT ELSE
+         ERR.MSG = 'Cannot create/open audit file: ' : AUDIT.FILE : ' - ' : CREATE.OUT
+         CLOSE F.CONTROL
+         RETURN
+      END
+   END
+
+   PROGRAM.NAME = 'DATA.IMPORT'
+   AUDIT.ID = PROGRAM.NAME : '*' : DATA.FILE : '*' : CONTROL.REC<CTRL.CURR.DATE> : '*' : CONTROL.REC<CTRL.CURR.TIME>
+   AUDIT.REC = ''
+   AUDIT.REC<1> = PROGRAM.NAME
+   AUDIT.REC<2> = DATA.FILE
+   AUDIT.REC<3> = CONTROL.REC<CTRL.CURR.DATE>
+   AUDIT.REC<4> = CONTROL.REC<CTRL.CURR.TIME>
+   AUDIT.REC<5> = CONTROL.REC<CTRL.CURR.ACCOUNT>
+   AUDIT.REC<6> = LOG.PATH
+   AUDIT.REC<7> = CONFIRM.ANSWER
+   WRITE AUDIT.REC TO F.AUDIT, AUDIT.ID
+   CLOSE F.AUDIT
+   CLOSE F.CONTROL
+
+   CRT 'Review recorded: ' : CONFIRM.ANSWER
+   RETURN
+
+DISPLAY.HEADER:
+   HEADER.WIDTH = 78
+   HEADER.TITLE = 'Data Change Tracking'
+   HEADER.LEFT = 'Account: ' : CONTROL.REC<CTRL.CURR.ACCOUNT>
+   HEADER.RIGHT = 'Date: ' : OCONV(CONTROL.REC<CTRL.CURR.DATE>, 'D4/') : '  Time: ' : OCONV(CONTROL.REC<CTRL.CURR.TIME>, 'MTS')
+   HEADER.SPACES = HEADER.WIDTH - LEN(HEADER.LEFT) - LEN(HEADER.RIGHT)
+   IF HEADER.SPACES < 1 THEN HEADER.SPACES = 1
+   CRT
+   CRT SPACE((HEADER.WIDTH - LEN(HEADER.TITLE)) / 2) : HEADER.TITLE
+   CRT STR('-', HEADER.WIDTH)
+   CRT HEADER.LEFT : SPACE(HEADER.SPACES) : HEADER.RIGHT
+   CRT STR('-', HEADER.WIDTH)
+   CRT 'Target MV file: ' : DATA.FILE
+   CRT 'Added       : ' : CONTROL.REC<CTRL.CURR.ADDED>
+   CRT 'Changed     : ' : CONTROL.REC<CTRL.CURR.CHANGED>
+   CRT 'Deleted     : ' : CONTROL.REC<CTRL.CURR.DELETED>
+RETURN
+
+DISPLAY.SUMMARY:
+   CRT
+   CRT 'Change Summary'
+   CRT STR('-', 78)
+   CRT 'No. Action  Record ID                                      Fields'
+   CRT STR('-', 78)
+   FOR SUMMARY.NO = 1 TO SUMMARY.COUNT
+      CRT FMT(SUMMARY.NO, 'R#3') : '  ' : FMT(SUMMARY.ACTION<SUMMARY.NO>, 'L#6') : '  ' : FMT(SUMMARY.RECORD<SUMMARY.NO>, 'L#42') : '  ' : SUMMARY.FIELDS<SUMMARY.NO>
+   NEXT SUMMARY.NO
+   IF SUMMARY.COUNT = 0 THEN CRT 'No changes found.'
+   CRT STR('-', 78)
+RETURN
+*=============================================================================
+END

@@ -1,0 +1,77 @@
+*=============================================================================
+* IMPORT.EQUATES
+*
+* Shared equates for the Excel/CSV Import subsystem.
+* $INCLUDE this file into any program/subroutine that participates in the
+* import pipeline so attribute numbers and file-type codes stay consistent
+* across the whole subsystem.
+*
+* Author:  <your name>
+* Project: Excel Import Automation - Client: Bruce
+*=============================================================================
+
+* --- Data record layout -----------------------------------------------
+EQU DATA.RESERVED.ATTRS  TO 10      ; * Attrs 1-10 reserved for metadata
+EQU DATA.START.ATTR      TO 11      ; * First column (Col B) lands here
+
+* --- Control record layout ----------------------------------------------
+EQU CTRL.RESERVED.ATTRS  TO 10      ; * Attrs 1-10 reserved for metadata
+
+* Current load block: attrs 11-30 (20-attribute reservation, 8 free for growth)
+EQU CTRL.CURR.TYPE       TO 11      ; * Current load: file type
+EQU CTRL.CURR.DATE       TO 12      ; * Current load: date
+EQU CTRL.CURR.TIME       TO 13      ; * Current load: time
+EQU CTRL.CURR.COUNT      TO 14      ; * Current load: record count
+EQU CTRL.CURR.ADDED      TO 15      ; * Current load: added count
+EQU CTRL.CURR.CHANGED    TO 16      ; * Current load: changed count
+EQU CTRL.CURR.DELETED    TO 17      ; * Current load: deleted count
+EQU CTRL.CURR.DIFFPATH   TO 18      ; * Current load: diff report filename/relative path
+EQU CTRL.CURR.ACCOUNT    TO 19      ; * Current load: OS user that ran it
+EQU CTRL.CURR.SRC.DIR    TO 20      ; * Current load: common archive root directory
+EQU CTRL.CURR.SRC.NAME   TO 22      ; * Current load: source file name
+EQU CTRL.CURR.CHANGE.LOG TO 23      ; * Current load: change-log filename/relative path
+EQU CTRL.CURR.SKIPPED    TO 24      ; * Current load: unchanged/skipped count
+EQU CTRL.CURR.SKIPPED.LEGACY TO 21  ; * Legacy location retained for transition reads
+
+* Prior load block: attrs 31-50 (20-attribute reservation, 7 free for growth)
+EQU CTRL.PRIOR.TYPE      TO 31      ; * Prior load: file type
+EQU CTRL.PRIOR.DATE      TO 32      ; * Prior load: date
+EQU CTRL.PRIOR.TIME      TO 33      ; * Prior load: time
+EQU CTRL.PRIOR.COUNT     TO 34      ; * Prior load: record count
+EQU CTRL.PRIOR.ADDED     TO 35      ; * Prior load: added count
+EQU CTRL.PRIOR.CHANGED   TO 36      ; * Prior load: changed count
+EQU CTRL.PRIOR.DELETED   TO 37      ; * Prior load: deleted count
+EQU CTRL.PRIOR.DIFFPATH  TO 38      ; * Prior load: diff report filename/relative path
+EQU CTRL.PRIOR.ACCOUNT   TO 39      ; * Prior load: OS user that ran it
+EQU CTRL.PRIOR.SRC.DIR   TO 40      ; * Prior load: common archive root directory
+EQU CTRL.PRIOR.SRC.NAME  TO 42      ; * Prior load: source file name
+EQU CTRL.PRIOR.CHANGE.LOG TO 43     ; * Prior load: change-log filename/relative path
+EQU CTRL.PRIOR.SKIPPED   TO 44      ; * Prior load: unchanged/skipped count
+EQU CTRL.PRIOR.SKIPPED.LEGACY TO 41 ; * Legacy location retained for transition reads
+
+* --- File type codes -----------------------------------------------------
+EQU FT.FULL      TO 'FULL'
+EQU FT.UPDATE    TO 'UPDATE'
+EQU FT.PARTIAL   TO 'PARTIAL'
+EQU FT.DELETED   TO 'DELETED'
+
+
+* --- Dictionary record layout (standard D-type) --------------------------
+* SD manual: 1=type, 2=location, 3=conversion, 4=name, 5=format,
+* 6=single/multi-valued, 7=association.
+EQU DICT.TYPE.ATTR     TO 1          ; * 'D'
+EQU DICT.LOC.ATTR      TO 2          ; * Attribute number in data record
+EQU DICT.CONV.ATTR     TO 3          ; * Conversion code
+EQU DICT.NAME.ATTR     TO 4          ; * Display name
+EQU DICT.FORMAT.ATTR   TO 5          ; * Display format, e.g. '20L'
+EQU DICT.SM.ATTR       TO 6          ; * 'S' or 'M'
+EQU DICT.ASSOC.ATTR    TO 7          ; * Association (blank when unused)
+
+* --- Misc ------------------------------------------------------------------
+EQU IMPORT.LOG.DIR TO 'import.logs'  ; * Detailed run log, one file per day (see SR.IMPORT.LOG / PURGE.IMPORT.LOG)
+
+* --- Import installation status --------------------------------------------
+EQU IMPORT.CONFIG.FILE   TO 'IMPORT.CONFIG'
+EQU IMPORT.CONFIG.ID     TO 'STATUS'
+EQU IMPORT.CONFIG.NOT.READY TO 0
+EQU IMPORT.CONFIG.READY    TO 1

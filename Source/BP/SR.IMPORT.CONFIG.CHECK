@@ -1,0 +1,35 @@
+SUBROUTINE SR.IMPORT.CONFIG.CHECK(IS.READY, ERR.MSG)
+*=============================================================================
+* SR.IMPORT.CONFIG.CHECK
+*
+* Purpose:
+*   Generic readiness check for Data Import dependencies.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   IS.READY = 0
+   ERR.MSG  = ''
+
+   OPEN IMPORT.CONFIG.FILE TO F.CONFIG ELSE
+      ERR.MSG = 'Config file not found: ' : IMPORT.CONFIG.FILE
+      RETURN
+   END
+
+   READ CONFIG.STATUS FROM F.CONFIG, IMPORT.CONFIG.ID ELSE
+      ERR.MSG = 'Config record not found: ' : IMPORT.CONFIG.ID
+      CLOSE F.CONFIG
+      RETURN
+   END
+
+   IF CONFIG.STATUS = IMPORT.CONFIG.READY THEN
+      IS.READY = 1
+   END ELSE
+      ERR.MSG = 'Import subsystem is not marked READY.'
+   END
+
+   CLOSE F.CONFIG
+   RETURN
+*=============================================================================
+END

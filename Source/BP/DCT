@@ -1,0 +1,69 @@
+PROGRAM DCT
+*=============================================================================
+* DCT
+*
+* Purpose:
+*   Main launcher for DCT operations.
+*   Lets users select target MV file and report mode from one entrypoint.
+*=============================================================================
+   $CATALOGUE
+
+   PROMPT.W = 30
+
+   LOOP
+      CRT @(-1)
+      GOSUB DISPLAY.HEADER
+      CRT STR('-', 78)
+      CRT
+      PROMPT.LBL = 'Target MV file'
+      CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+      INPUT DATA.FILE
+      DATA.FILE = TRIM(CHANGE(DATA.FILE, CHAR(13), ''))
+      IF DATA.FILE = '' THEN CONTINUE
+      IF UPCASE(DATA.FILE) = 'END' OR UPCASE(DATA.FILE) = 'QUIT' THEN EXIT
+
+      CRT
+      CRT 'Report view'
+      CRT STR('-', 30)
+      CRT '  1  Change details'
+      CRT '  2  Load summary'
+      CRT
+      PROMPT.LBL = 'Select view [1]'
+      CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+      INPUT MODE.CODE
+      MODE.CODE = TRIM(CHANGE(MODE.CODE, CHAR(13), ''))
+      IF MODE.CODE = '' THEN MODE.CODE = '1'
+
+      ERR.MSG = ''
+      IF MODE.CODE = '2' OR UPCASE(MODE.CODE) = 'S' OR UPCASE(MODE.CODE) = 'SUMMARY' THEN
+         CALL SR.IMPORT.SUMMARY.PRINT(DATA.FILE, ERR.MSG)
+      END ELSE IF MODE.CODE = '1' OR UPCASE(MODE.CODE) = 'D' OR UPCASE(MODE.CODE) = 'DETAIL' THEN
+         CALL SR.DCT.DETAIL.VIEW(DATA.FILE, ERR.MSG)
+      END ELSE
+         ERR.MSG = 'Please select 1 for details or 2 for the load summary.'
+      END
+
+      IF ERR.MSG # '' THEN
+         CRT
+         CRT 'Error: ' : ERR.MSG
+      END
+
+      CRT
+      CRT STR('-', 78)
+      CRT 'Press Enter for another target file, or Q to quit: ':
+      INPUT NEXT.ACTION
+      NEXT.ACTION = UPCASE(TRIM(CHANGE(NEXT.ACTION, CHAR(13), '')))
+      IF NEXT.ACTION = 'Q' OR NEXT.ACTION = 'QUIT' THEN EXIT
+   REPEAT
+
+   CRT 'Exiting DCT.'
+   STOP
+
+DISPLAY.HEADER:
+   CRT
+   CRT SPACE(28) : 'DATA CONTROL TOOL'
+   CRT SPACE(25) : 'Change and Load Review'
+   CRT STR('=', 78)
+RETURN
+
+   END

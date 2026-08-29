@@ -1,0 +1,36 @@
+SUBROUTINE SR.IMPORT.PATH.RESOLVE(ROOT.PATH, FILE.POINTER, FULL.PATH)
+*=============================================================================
+* SR.IMPORT.PATH.RESOLVE
+*
+* Purpose:
+*   Resolve a stored file pointer to a full path.
+*   - Absolute pointers (/...) are returned as-is.
+*   - Relative pointers are joined to ROOT.PATH.
+*=============================================================================
+   $CATALOGUE
+
+   ROOT.PATH = TRIM(CHANGE(ROOT.PATH, CHAR(13), ''))
+   FILE.POINTER = TRIM(CHANGE(FILE.POINTER, CHAR(13), ''))
+   FULL.PATH = ''
+
+   IF FILE.POINTER = '' THEN RETURN
+
+   IF FILE.POINTER[1, 1] = '/' THEN
+      FULL.PATH = FILE.POINTER
+      RETURN
+   END
+
+   IF ROOT.PATH = '' THEN
+      FULL.PATH = FILE.POINTER
+      RETURN
+   END
+
+   IF ROOT.PATH[LEN(ROOT.PATH), 1] = '/' THEN
+      FULL.PATH = ROOT.PATH : FILE.POINTER
+   END ELSE
+      FULL.PATH = ROOT.PATH : '/' : FILE.POINTER
+   END
+
+   RETURN
+*=============================================================================
+END

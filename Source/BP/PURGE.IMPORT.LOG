@@ -1,0 +1,70 @@
+PROGRAM PURGE.IMPORT.LOG
+*=============================================================================
+* PURGE.IMPORT.LOG
+*
+* Purpose:
+*   Deletes import log files (see SR.IMPORT.LOG) older than a chosen
+*   retention period. Run manually or scheduled - not called by
+*   DATA.IMPORT itself, so log growth never affects the import run.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   CRT @(-1)
+   CRT SPACE(24) : 'Purge Import Logs'
+   CRT STR('-', 60)
+   CRT 'Log directory : ' : IMPORT.LOG.DIR
+   CRT
+
+   OPENSEQ IMPORT.LOG.DIR TO F.CHECK ELSE
+      CRT 'Log directory does not exist yet - nothing to purge.'
+      STOP
+   END
+   CLOSESEQ F.CHECK
+
+   CRT 'Delete log files older than how many days [30] : ':
+   INPUT RETENTION.DAYS
+   IF UPCASE(TRIM(RETENTION.DAYS)) = 'END' THEN STOP
+   RETENTION.DAYS = TRIM(CHANGE(RETENTION.DAYS, CHAR(13), ''))
+   IF RETENTION.DAYS = '' THEN RETENTION.DAYS = 30
+   IF NOT(NUM(RETENTION.DAYS)) OR RETENTION.DAYS < 1 THEN
+      CRT 'Retention days must be a positive number.'
+      STOP
+   END
+
+   FIND.CMD = '!find "' : IMPORT.LOG.DIR : '" -maxdepth 1 -name "import_*.log" -type f -mtime +' : RETENTION.DAYS
+   EXECUTE FIND.CMD CAPTURING MATCH.LIST
+
+   MATCH.COUNT = 0
+   IF TRIM(MATCH.LIST) NE '' THEN MATCH.COUNT = DCOUNT(MATCH.LIST, @FM)
+
+   IF MATCH.COUNT = 0 THEN
+      CRT 'No log files older than ' : RETENTION.DAYS : ' days.'
+      STOP
+   END
+
+   CRT
+   CRT MATCH.COUNT : ' log file(s) to delete:'
+   FOR LINE.NO = 1 TO MATCH.COUNT
+      CRT '  ' : MATCH.LIST<LINE.NO>
+   NEXT LINE.NO
+
+   CRT
+   CRT 'Proceed with delete (Y/N) : ':
+   INPUT PROCEED
+   IF UPCASE(TRIM(PROCEED)) NE 'Y' THEN
+      CRT 'Cancelled.'
+      STOP
+   END
+
+   DELETE.CMD = '!find "' : IMPORT.LOG.DIR : '" -maxdepth 1 -name "import_*.log" -type f -mtime +' : RETENTION.DAYS : ' -delete'
+   EXECUTE DELETE.CMD CAPTURING DELETE.OUT
+
+   CRT
+   CRT STR('-', 60)
+   CRT 'Purge complete. Deleted ' : MATCH.COUNT : ' log file(s).'
+
+   STOP
+*=============================================================================
+END

@@ -1,0 +1,84 @@
+SUBROUTINE SR.DATA.DIFF(OLD.CSV, NEW.CSV, STAGING.DIR, CHANGE.LOG.DIR, REPORT.PATH, CHANGE.LOG.PATH, ADDED.CNT, CHANGED.CNT, DELETED.CNT, TOTAL.CNT, HEADER.ROW, ERR.MSG)
+*=============================================================================
+* SR.DATA.DIFF
+*
+* Purpose:
+*   Compares yesterday's archived CSV against today's CSV (both keyed by
+*   Column A / RecID) using scripts/sd_file_fetch.py --diff, so DATA.IMPORT
+*   only has to act on flagged rows - no per-row READ+compare against the
+*   live MV file, and no full re-parse of today's CSV in BASIC, is needed.
+*
+* Parameters:
+*   OLD.CSV      (IN)  - Path to the previous day's archived CSV
+*   NEW.CSV      (IN)  - Path to today's CSV
+*   STAGING.DIR  (IN)  - Directory to write the diff report into
+*   REPORT.PATH  (OUT) - Dated CSV with a leading Status column
+*                         (ADD/UPDATE/DELETE) plus the original columns
+*   CHANGE.LOG.PATH (OUT) - Detailed before/after field-level CSV report
+*   ADDED.CNT    (OUT) - Count of new RecIDs
+*   CHANGED.CNT  (OUT) - Count of RecIDs whose data changed
+*   DELETED.CNT  (OUT) - Count of RecIDs missing from today's file
+*   TOTAL.CNT    (OUT) - Total data row count in today's CSV
+*   HEADER.ROW   (OUT) - Today's column headers, VM-delimited
+*   ERR.MSG      (OUT) - Empty on success, description on failure
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE SDPYFUNC.H
+
+   EQU DIFF.SCRIPT TO 'scripts/sd_file_fetch.py'
+
+   REPORT.PATH  = ''
+   CHANGE.LOG.PATH = ''
+   ADDED.CNT    = 0
+   CHANGED.CNT  = 0
+   DELETED.CNT  = 0
+   TOTAL.CNT    = 0
+   HEADER.ROW   = ''
+   ERR.MSG      = ''
+
+   IF NOT(PY_IS_INITIALIZED()) THEN
+      PY.INIT.STATUS = PY_INITIALIZE()
+   END
+   PY.SET.STATUS = PY_STRSET('SD_SOURCE_REF', '--diff')
+   PY.SET.STATUS = PY_STRSET('SD_OLD_CSV', OLD.CSV)
+   PY.SET.STATUS = PY_STRSET('SD_NEW_CSV', NEW.CSV)
+   PY.SET.STATUS = PY_STRSET('SD_STAGING_DIR', STAGING.DIR)
+   PY.SET.STATUS = PY_STRSET('SD_CHANGELOG_DIR', CHANGE.LOG.DIR)
+   PY.RUN.STATUS = PY_RUNFILE(DIFF.SCRIPT)
+   OUTPUT.LINES = PY_GETATTR('SD_RESULT')
+   IF PY.RUN.STATUS # 0 AND OUTPUT.LINES = '' THEN
+      OUTPUT.LINES = 'ERR:Embedded Python diff execution failed'
+   END
+
+   * Surface any diagnostic lines (e.g. "most changed columns") the script
+   * printed before its final sentinel line - helps explain an unexpectedly
+   * high changed-row count without needing to run the script by hand.
+   NUM.OUT.LINES = DCOUNT(OUTPUT.LINES, @FM)
+   FOR DIAG.IDX = 1 TO NUM.OUT.LINES - 1
+      DIAG.LINE = OUTPUT.LINES<DIAG.IDX>
+      IF DIAG.LINE[1, 5] = 'DIFF_' OR DIAG.LINE[1, 2] = SPACE(2) THEN CRT DIAG.LINE
+   NEXT DIAG.IDX
+
+   LAST.LINE = OUTPUT.LINES<NUM.OUT.LINES>
+
+   BEGIN CASE
+      CASE LAST.LINE[1, 8] = 'DIFF_OK:'
+         FIELDS       = CHANGE(LAST.LINE[9, LEN(LAST.LINE) - 8], ':', @VM)
+         REPORT.PATH  = FIELDS<1, 1>
+         ADDED.CNT    = FIELDS<1, 2>
+         CHANGED.CNT  = FIELDS<1, 3>
+         DELETED.CNT  = FIELDS<1, 4>
+         TOTAL.CNT    = FIELDS<1, 5>
+         HEADER.ROW   = CHANGE(FIELDS<1, 6>, '|', @VM)
+         CHANGE.LOG.PATH = FIELDS<1, 7>
+      CASE LAST.LINE[1, 4] = 'ERR:'
+         ERR.MSG = LAST.LINE[5, LEN(LAST.LINE) - 4]
+      CASE 1
+         ERR.MSG = 'Diff failed: ' : OUTPUT.LINES
+   END CASE
+
+
+   RETURN
+*=============================================================================
+END

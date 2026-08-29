@@ -1,0 +1,44 @@
+SUBROUTINE SR.IMPORT.LOG(MESSAGE, LOG.PATH)
+*=============================================================================
+* SR.IMPORT.LOG
+*
+* Purpose:
+*   Appends one timestamped line to today's import log file, keeping the
+*   DATA.IMPORT screen limited to the few lines a user actually needs while
+*   every diagnostic detail still lands somewhere reviewable.
+*
+* Parameters:
+*   MESSAGE  (IN)  - Text to log (any embedded quotes/newlines are sanitized)
+*   LOG.PATH (OUT) - Full path of today's log file that the line was written to
+*
+* Log files live in IMPORT.LOG.DIR, one per day: import_YYYY-MM-DD.log.
+* Use PURGE.IMPORT.LOG to remove log files older than a chosen retention.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   EXECUTE '!mkdir -p "' : IMPORT.LOG.DIR : '" 2>&1' CAPTURING MKDIR.OUT
+
+   TODAY.STR = OCONV(DATE(), 'D4/YMD')
+   TODAY.STR = CHANGE(TODAY.STR, '/', '-')
+   LOG.PATH  = IMPORT.LOG.DIR : '/import_' : TODAY.STR : '.log'
+
+   * Strip characters that would break out of the shell double-quotes this
+   * line is written through (OWASP: never pass unsanitized text to EXECUTE).
+   SAFE.MSG = MESSAGE
+   SAFE.MSG = CHANGE(SAFE.MSG, CHAR(13), '')
+   SAFE.MSG = CHANGE(SAFE.MSG, CHAR(10), ' ')
+   SAFE.MSG = CHANGE(SAFE.MSG, '"', "'")
+   SAFE.MSG = CHANGE(SAFE.MSG, '`', "'")
+   SAFE.MSG = CHANGE(SAFE.MSG, '$', '')
+   SAFE.MSG = CHANGE(SAFE.MSG, '\', '/')
+
+   LINE.OUT = OCONV(TIME(), 'MTS') : '  ' : SAFE.MSG
+
+   CMD = '!printf ' : "'%s\n' " : '"' : LINE.OUT : '" >> "' : LOG.PATH : '" 2>&1'
+   EXECUTE CMD CAPTURING LOG.OUT
+
+RETURN
+*=============================================================================
+END

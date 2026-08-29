@@ -1,0 +1,135 @@
+SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.CNT, CHANGED.CNT, DELETED.CNT, DIFF.PATH, CHANGE.LOG.PATH, RUN.USER, SOURCE.FILE, SKIPPED.CNT, ERR.MSG)
+*=============================================================================
+* SR.CONTROL.UPDATE
+*
+* Purpose:
+*   Maintains the audit/history record for a given import source.
+*   Reads whatever is currently in attrs 11-21 (the last load's stats)
+*   and shifts them down into attrs 31-41 ("prior load") BEFORE writing
+*   the new load's stats into 11-21 ("current load"). This gives every
+*   control record a two-generation history: current vs. prior.
+*
+* Parameters:
+*   CONTROL.FILE (IN)  - Name of the control file
+*   CTRL.ID      (IN)  - Control record key (target MV filename)
+*   FILE.TYPE    (IN)  - FT.FULL / FT.UPDATE / FT.PARTIAL / FT.DELETED
+*   REC.COUNT    (IN)  - Number of records processed in this load
+*   ADDED.CNT    (IN)  - Number of new records this load
+*   CHANGED.CNT  (IN)  - Number of changed records this load
+*   DELETED.CNT  (IN)  - Number of records missing from this load
+*   DIFF.PATH    (IN)  - Diff report path for this load, or ''
+*   CHANGE.LOG.PATH (IN) - Detailed before/after change log path, or ''
+*   RUN.USER     (IN)  - OS user that ran this load (one SD account may be
+*                         shared by multiple OS users)
+*   SOURCE.FILE  (IN)  - Dated archive path for this load (not the working
+*                         copy - that may be deleted after Excel/Drive runs).
+*                         Split into directory + filename attributes so
+*                         either can be queried/reported on independently.
+*   SKIPPED.CNT  (IN)  - Number of unchanged/skipped records this load
+*   ERR.MSG      (OUT) - Empty on success, description on failure
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   ERR.MSG = ''
+
+   * ---- Split SOURCE.FILE into directory + filename ----------------------
+   SRC.DIR.PART  = ''
+   SRC.NAME.PART = SOURCE.FILE
+   IF SOURCE.FILE[1, 1] = '/' THEN
+      FOR SLASH.POS = LEN(SOURCE.FILE) TO 1 STEP -1
+         IF SOURCE.FILE[SLASH.POS, 1] = '/' THEN
+            SRC.DIR.PART  = SOURCE.FILE[1, SLASH.POS - 1]
+            SRC.NAME.PART = SOURCE.FILE[SLASH.POS + 1, LEN(SOURCE.FILE) - SLASH.POS]
+            EXIT
+         END
+      NEXT SLASH.POS
+   END ELSE
+      FIRST.SLASH = INDEX(SOURCE.FILE, '/', 1)
+      IF FIRST.SLASH > 0 THEN
+         SRC.DIR.PART = SOURCE.FILE[1, FIRST.SLASH - 1]
+         SRC.NAME.PART = SOURCE.FILE[FIRST.SLASH + 1, LEN(SOURCE.FILE) - FIRST.SLASH]
+      END
+   END
+
+   * Keep only the filename/relative pointer in control; full path is
+   * reconstructed by readers using CTRL.CURR.SRC.DIR as the common root.
+   DIFF.NAME = DIFF.PATH
+   IF DIFF.PATH[1, 1] = '/' THEN
+      * Keep absolute paths intact for older control records.
+   END ELSE IF DIFF.PATH[1, LEN(SRC.DIR.PART)] = SRC.DIR.PART THEN
+      DIFF.NAME = DIFF.PATH[LEN(SRC.DIR.PART) + 2, LEN(DIFF.PATH) - LEN(SRC.DIR.PART) - 1]
+   END ELSE
+      FOR SLASH.POS = LEN(DIFF.PATH) TO 1 STEP -1
+         IF DIFF.PATH[SLASH.POS, 1] = '/' THEN
+            DIFF.NAME = DIFF.PATH[SLASH.POS + 1, LEN(DIFF.PATH) - SLASH.POS]
+            EXIT
+         END
+      NEXT SLASH.POS
+   END
+
+   CHANGE.LOG.NAME = CHANGE.LOG.PATH
+   IF CHANGE.LOG.PATH[1, 1] = '/' THEN
+      * Keep absolute paths intact for older control records.
+   END ELSE IF CHANGE.LOG.PATH[1, LEN(SRC.DIR.PART)] = SRC.DIR.PART THEN
+      CHANGE.LOG.NAME = CHANGE.LOG.PATH[LEN(SRC.DIR.PART) + 2, LEN(CHANGE.LOG.PATH) - LEN(SRC.DIR.PART) - 1]
+   END ELSE
+      FOR SLASH.POS = LEN(CHANGE.LOG.PATH) TO 1 STEP -1
+         IF CHANGE.LOG.PATH[SLASH.POS, 1] = '/' THEN
+            CHANGE.LOG.NAME = CHANGE.LOG.PATH[SLASH.POS + 1, LEN(CHANGE.LOG.PATH) - SLASH.POS]
+            EXIT
+         END
+      NEXT SLASH.POS
+   END
+
+   OPEN CONTROL.FILE TO F.CTRL ELSE
+      EXECUTE 'CREATE.FILE ' : CONTROL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN CONTROL.FILE TO F.CTRL ELSE
+         ERR.MSG = 'Cannot create/open control file: ' : CONTROL.FILE : ' - ' : CREATE.OUT
+         RETURN
+      END
+   END
+
+   READ CTRL.REC FROM F.CTRL, CTRL.ID ELSE CTRL.REC = ''
+
+   * ---- Shift current -> prior, before overwriting current -------------
+   CTRL.REC<CTRL.PRIOR.TYPE>     = CTRL.REC<CTRL.CURR.TYPE>
+   CTRL.REC<CTRL.PRIOR.DATE>     = CTRL.REC<CTRL.CURR.DATE>
+   CTRL.REC<CTRL.PRIOR.TIME>     = CTRL.REC<CTRL.CURR.TIME>
+   CTRL.REC<CTRL.PRIOR.COUNT>    = CTRL.REC<CTRL.CURR.COUNT>
+   CTRL.REC<CTRL.PRIOR.ADDED>    = CTRL.REC<CTRL.CURR.ADDED>
+   CTRL.REC<CTRL.PRIOR.CHANGED>  = CTRL.REC<CTRL.CURR.CHANGED>
+   CTRL.REC<CTRL.PRIOR.DELETED>  = CTRL.REC<CTRL.CURR.DELETED>
+   CTRL.REC<CTRL.PRIOR.DIFFPATH> = CTRL.REC<CTRL.CURR.DIFFPATH>
+   CTRL.REC<CTRL.PRIOR.CHANGE.LOG> = CTRL.REC<CTRL.CURR.CHANGE.LOG>
+   CTRL.REC<CTRL.PRIOR.ACCOUNT>  = CTRL.REC<CTRL.CURR.ACCOUNT>
+   CTRL.REC<CTRL.PRIOR.SRC.DIR>  = CTRL.REC<CTRL.CURR.SRC.DIR>
+   CTRL.REC<CTRL.PRIOR.SRC.NAME> = CTRL.REC<CTRL.CURR.SRC.NAME>
+   CURR.SKIPPED.VALUE = CTRL.REC<CTRL.CURR.SKIPPED>
+   IF CURR.SKIPPED.VALUE = '' THEN CURR.SKIPPED.VALUE = CTRL.REC<CTRL.CURR.SKIPPED.LEGACY>
+   CTRL.REC<CTRL.PRIOR.SKIPPED>  = CURR.SKIPPED.VALUE
+
+   * ---- Write current load stats ------------------------------------------
+   CTRL.REC<CTRL.CURR.TYPE>     = FILE.TYPE
+   * Store internal date/time values; apply OCONV only when displaying them.
+   CTRL.REC<CTRL.CURR.DATE>     = ICONV(OCONV(DATE(), 'D4/'), 'D4/')
+   CTRL.REC<CTRL.CURR.TIME>     = ICONV(OCONV(TIME(), 'MTS'), 'MTS')
+   CTRL.REC<CTRL.CURR.COUNT>    = REC.COUNT
+   CTRL.REC<CTRL.CURR.ADDED>    = ADDED.CNT
+   CTRL.REC<CTRL.CURR.CHANGED>  = CHANGED.CNT
+   CTRL.REC<CTRL.CURR.DELETED>  = DELETED.CNT
+   CTRL.REC<CTRL.CURR.DIFFPATH> = DIFF.NAME
+   CTRL.REC<CTRL.CURR.CHANGE.LOG> = CHANGE.LOG.NAME
+   CTRL.REC<CTRL.CURR.ACCOUNT>  = RUN.USER
+   CTRL.REC<CTRL.CURR.SRC.DIR>  = SRC.DIR.PART
+   CTRL.REC<CTRL.CURR.SRC.NAME> = SRC.NAME.PART
+   CTRL.REC<CTRL.CURR.SKIPPED>  = SKIPPED.CNT
+
+   WRITE CTRL.REC TO F.CTRL, CTRL.ID
+
+   CLOSE F.CTRL
+
+   RETURN
+*=============================================================================
+END

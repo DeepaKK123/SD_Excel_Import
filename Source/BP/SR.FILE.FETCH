@@ -1,0 +1,73 @@
+SUBROUTINE SR.FILE.FETCH(SOURCE.REF, LOCAL.PATH, ERR.MSG)
+*=============================================================================
+* SR.FILE.FETCH
+*
+* Purpose:
+*   Resolves the incoming file reference to a local plain CSV/tab file that
+*   the rest of the import pipeline (SR.LOAD.FILE, SR.DATA.PARSE, ...) can
+*   open with OPENSEQ. Client sends files two ways:
+*     - Emailed attachment: someone saves it to a local folder on the
+*       server by hand - already just a local path.
+*     - Google Drive: file lives on Google's servers and must be
+*       downloaded (and converted to CSV if it's a real .xlsx) first.
+*   Both cases are delegated to scripts/sd_file_fetch.py (Python), since
+*   Drive access and Excel-binary conversion aren't practical in BASIC.
+*   Any informational conversion messages (for example, skipped workbook
+*   sheets or merged-row totals) are surfaced to the operator before the
+*   final OK:/ERR: sentinel is parsed.
+*
+* Parameters:
+*   SOURCE.REF  (IN)  - Either a plain local path (e.g.
+*                        '/home/sd/import/incoming/customers.csv'), or a
+*                        'DRIVE:<file-name>' reference to fetch from Drive.
+*   LOCAL.PATH  (OUT) - Local filesystem path ready for SR.LOAD.FILE, or
+*                        '' on failure.
+*   ERR.MSG     (OUT) - Empty string on success, description on failure.
+*
+* Prerequisites for the DRIVE: path (see scripts/sd_file_fetch.py header):
+*   rclone installed + configured with a remote, and openpyxl installed if
+*   the client sends true binary .xlsx files.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE SDPYFUNC.H
+
+   EQU FETCH.SCRIPT   TO 'scripts/sd_file_fetch.py'
+   EQU STAGING.DIR    TO 'import.work'
+
+   LOCAL.PATH = ''
+   ERR.MSG    = ''
+
+   IF NOT(PY_IS_INITIALIZED()) THEN
+      PY.INIT.STATUS = PY_INITIALIZE()
+   END
+   PY.SET.STATUS = PY_STRSET('SD_SOURCE_REF', SOURCE.REF)
+   PY.SET.STATUS = PY_STRSET('SD_STAGING_DIR', STAGING.DIR)
+   PY.RUN.STATUS = PY_RUNFILE(FETCH.SCRIPT)
+   OUTPUT.LINES = PY_GETATTR('SD_RESULT')
+   IF PY.RUN.STATUS # 0 AND OUTPUT.LINES = '' THEN
+      OUTPUT.LINES = 'ERR:Embedded Python execution failed'
+   END
+
+   * ---- Last line carries an explicit OK:/ERR: sentinel; the OS exit code
+   * ---- via SYSTEM(0) is not reliable through EXECUTE's '!' OS escape.
+   LAST.LINE = OUTPUT.LINES<DCOUNT(OUTPUT.LINES, @FM)>
+
+   BEGIN CASE
+      CASE LAST.LINE[1, 3] = 'OK:'
+         LOCAL.PATH = LAST.LINE[4, LEN(LAST.LINE) - 3]
+      CASE LAST.LINE[1, 7] = 'OKLIST:'
+         LOCAL.PATH = 'MANIFEST:' : LAST.LINE[8, LEN(LAST.LINE) - 7]
+      CASE LAST.LINE[1, 4] = 'ERR:'
+         ERR.MSG = LAST.LINE[5, LEN(LAST.LINE) - 4]
+      CASE 1
+         ERR.MSG = 'Fetch failed: ' : OUTPUT.LINES
+   END CASE
+
+   IF ERR.MSG = '' AND LOCAL.PATH = '' THEN
+      ERR.MSG = 'Fetch script produced no output'
+   END
+
+   RETURN
+*=============================================================================
+END

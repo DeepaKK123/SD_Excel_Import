@@ -1,0 +1,90 @@
+PROGRAM IMPORT.LOG.VIEW
+*=============================================================================
+* IMPORT.LOG.VIEW
+*
+* Purpose:
+*   Views the detailed import run log written by SR.IMPORT.LOG (one file
+*   per day, IMPORT.LOG.DIR/import_YYYY-MM-DD.log) - the diagnostic detail
+*   DATA.IMPORT no longer prints to screen (stored-copy paths, diff/parse
+*   row counts, per-row write failures, etc.).
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   CRT @(-1)
+   CRT SPACE(24) : 'Import Log Viewer'
+   CRT STR('-', 60)
+   CRT 'Log directory : ' : IMPORT.LOG.DIR
+   CRT
+
+   LIST.CMD = '!find "' : IMPORT.LOG.DIR : '" -maxdepth 1 -type f -name "import_*.log" -printf "%f\n" 2>/dev/null | sort -r'
+   EXECUTE LIST.CMD CAPTURING FILE.LIST
+
+   FILE.COUNT = 0
+   IF TRIM(FILE.LIST) NE '' THEN FILE.COUNT = DCOUNT(FILE.LIST, @FM)
+
+   IF FILE.COUNT = 0 THEN
+      CRT 'No log files found.'
+      STOP
+   END
+
+   CRT 'Available logs (most recent first):'
+   DISPLAY.COUNT = FILE.COUNT
+   IF DISPLAY.COUNT > 14 THEN DISPLAY.COUNT = 14
+   FOR LINE.NO = 1 TO DISPLAY.COUNT
+      CRT '  ' : FILE.LIST<LINE.NO>
+   NEXT LINE.NO
+   IF FILE.COUNT > DISPLAY.COUNT THEN
+      CRT '  ... and ' : (FILE.COUNT - DISPLAY.COUNT) : ' older file(s)'
+   END
+
+   TODAY.STR = OCONV(DATE(), 'D4/YMD')
+   TODAY.STR = CHANGE(TODAY.STR, '/', '-')
+
+   CRT
+   CRT 'Log date (YYYY-MM-DD) [' : TODAY.STR : ']       : ':
+   INPUT LOG.DATE
+   LOG.DATE = TRIM(CHANGE(LOG.DATE, CHAR(13), ''))
+   IF UPCASE(LOG.DATE) = 'END' THEN STOP
+   IF LOG.DATE = '' THEN LOG.DATE = TODAY.STR
+
+   LOG.PATH = IMPORT.LOG.DIR : '/import_' : LOG.DATE : '.log'
+
+   OPENSEQ LOG.PATH TO F.LOG ELSE
+      CRT 'No log file for date: ' : LOG.DATE
+      STOP
+   END
+
+   CRT 'Filter text (blank = show all)             : ':
+   INPUT FILTER.TEXT
+   FILTER.TEXT = TRIM(CHANGE(FILTER.TEXT, CHAR(13), ''))
+
+   CRT
+   CRT STR('-', 60)
+
+   LINE.COUNT = 0
+   SHOWN.COUNT = 0
+   LOOP
+      READSEQ LOG.LINE FROM F.LOG ELSE EXIT
+      IF FILTER.TEXT NE '' AND INDEX(UPCASE(LOG.LINE), UPCASE(FILTER.TEXT), 1) = 0 THEN CONTINUE
+
+      CRT LOG.LINE
+      SHOWN.COUNT += 1
+      LINE.COUNT += 1
+      IF LINE.COUNT >= 20 THEN
+         CRT
+         CRT 'Press Enter for more, Q to quit : ':
+         INPUT MORE.KEY
+         IF UPCASE(TRIM(MORE.KEY)) = 'Q' THEN EXIT
+         LINE.COUNT = 0
+      END
+   REPEAT
+   CLOSESEQ F.LOG
+
+   CRT STR('-', 60)
+   CRT SHOWN.COUNT : ' line(s) shown.'
+
+   STOP
+*=============================================================================
+END

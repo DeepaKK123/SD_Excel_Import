@@ -1,0 +1,67 @@
+SUBROUTINE SR.DATA.PARSE(FILEPATH, DELIM, HEADER.ROW, DATA.ROWS, REC.COUNT, ERR.MSG)
+*=============================================================================
+* SR.DATA.PARSE
+*
+* Purpose:
+*   Generic delimited-file reader. Reads a text file using whatever field
+*   delimiter is supplied and converts it into MV-friendly dynamic arrays:
+*   one VM-delimited header row, and one FM-delimited list of VM-delimited
+*   data rows. Works for CSV, tab-delimited, pipe-delimited, or any other
+*   single-character delimiter - not tied to any one file type.
+*
+* Parameters:
+*   FILEPATH   (IN)  - Full path of the file to read
+*   DELIM      (IN)  - Field delimiter used in the source file. Accepts
+*                       either a literal delimiter character (',', '|', etc.)
+*                       or one of the following convenience keywords:
+*                          'COMMA' -> ','
+*                          'TAB'   -> CHAR(9)
+*                          'PIPE'  -> '|'
+*                       Any other single character passed in is used as-is.
+*   HEADER.ROW (OUT) - Column headers, VM-delimited (Col A, Col B, Col C...)
+*   DATA.ROWS  (OUT) - Data rows; rows separated by @FM, fields within a
+*                       row separated by @VM
+*   REC.COUNT  (OUT) - Number of data rows read (excludes header)
+*   ERR.MSG    (OUT) - Empty on success, description on failure
+*
+* Notes:
+*   - Assumes the first line of the file is the header row.
+*   - Blank lines are skipped.
+*=============================================================================
+   $CATALOGUE
+
+   $INCLUDE SDPYFUNC.H
+
+   EQU PARSE.SCRIPT TO 'scripts/sd_file_fetch.py'
+
+   HEADER.ROW = ''
+   DATA.ROWS  = ''
+   REC.COUNT  = 0
+   ERR.MSG    = ''
+
+   IF NOT(PY_IS_INITIALIZED()) THEN
+      PY.INIT.STATUS = PY_INITIALIZE()
+   END
+   PY.SET.STATUS = PY_STRSET('SD_SOURCE_REF', '--parse')
+   PY.SET.STATUS = PY_STRSET('SD_PARSE_PATH', FILEPATH)
+   PY.SET.STATUS = PY_STRSET('SD_PARSE_DELIM', DELIM)
+   PY.SET.STATUS = PY_STRSET('SD_STAGING_DIR', '')
+   PY.RUN.STATUS = PY_RUNFILE(PARSE.SCRIPT)
+   PARSE.RESULT = PY_GETATTR('SD_RESULT')
+   IF PY.RUN.STATUS # 0 OR PARSE.RESULT # 'PARSE_OK' THEN
+      ERR.MSG = PY_GETATTR('SD_RESULT')
+      IF ERR.MSG = '' THEN ERR.MSG = 'Embedded Python CSV parse failed.'
+      IF ERR.MSG[1, 4] = 'ERR:' THEN ERR.MSG = ERR.MSG[5, LEN(ERR.MSG) - 4]
+      RETURN
+   END
+
+   HEADER.ROW = PY_GETATTR('SD_HEADER')
+   DATA.ROWS = PY_GETATTR('SD_ROWS')
+   REC.COUNT = PY_GETATTR('SD_ROW_COUNT')
+   IF HEADER.ROW = '' THEN
+      ERR.MSG = 'File contained no data (missing header row): ' : FILEPATH
+   END
+
+   RETURN
+*=============================================================================
+END

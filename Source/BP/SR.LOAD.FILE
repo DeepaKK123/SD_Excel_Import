@@ -1,0 +1,85 @@
+SUBROUTINE SR.LOAD.FILE(SOURCE.PATH, FILE.STORE.DIR, STORED.NAME, ERR.MSG)
+*=============================================================================
+* SR.LOAD.FILE
+*
+* Purpose:
+*   Saves a dated copy of the incoming spreadsheet (CSV/tab) file so that
+*   today's load can later be compared against any prior day's load.
+*   This is a pure file-copy operation - no MV/DICT logic here.
+*
+* Parameters:
+*   SOURCE.PATH    (IN)  - Full path of the incoming file
+*                           e.g. '/usr/sd/import/incoming/customers.csv'
+*   FILE.STORE.DIR (IN)  - Directory to store the dated copy in. Pass ''
+*                           to default to the same directory as the source
+*                           file - the client did not specify a separate
+*                           location, only that files "will be stored on
+*                           the server".
+*   STORED.NAME    (OUT) - Name of the file created, or '' on failure
+*   ERR.MSG        (OUT) - Empty string on success, description on failure
+*
+* Notes:
+*   - Stored filename format: <basename>_<YYYY-MM-DD>.<ext>
+*   - Does not alter or delete the source file.
+*=============================================================================
+
+   $CATALOGUE
+
+   STORED.NAME = ''
+   ERR.MSG     = ''
+
+   * ---- Split SOURCE.PATH into directory + base filename -----------------
+   SRC.DIR    = ''
+   BASE.NAME  = SOURCE.PATH
+   FOR I = LEN(SOURCE.PATH) TO 1 STEP -1
+      IF SOURCE.PATH[I, 1] = '/' THEN
+         SRC.DIR   = SOURCE.PATH[1, I - 1]
+         BASE.NAME = SOURCE.PATH[I + 1, LEN(SOURCE.PATH) - I]
+         EXIT
+      END
+   NEXT I
+
+   IF FILE.STORE.DIR = '' THEN FILE.STORE.DIR = SRC.DIR
+
+   * ---- Split BASE.NAME into name + extension so the date goes before ----
+   * ---- the extension instead of after it ---------------------------------
+   NAME.PART = BASE.NAME
+   EXT.PART  = ''
+   FOR I = LEN(BASE.NAME) TO 1 STEP -1
+      IF BASE.NAME[I, 1] = '.' THEN
+         NAME.PART = BASE.NAME[1, I - 1]
+         EXT.PART  = BASE.NAME[I, LEN(BASE.NAME) - I + 1]
+         EXIT
+      END
+   NEXT I
+
+   * ---- Build dated+timed filename -----------------------------------------
+   * Date alone is ambiguous if multiple imports run the same day - a later
+   * run would silently overwrite an earlier one and the "find previous
+   * archive" lookup would then skip straight past today's earlier run.
+   TODAY.STR = OCONV(DATE(), 'D4/YMD')      ; * e.g. 2026/08/17
+   TODAY.STR = CHANGE(TODAY.STR, '/', '-')  ; * -> 2026-08-17
+   TIME.STR  = OCONV(TIME(), 'MTS')         ; * e.g. 14:32:05
+   TIME.STR  = CHANGE(TIME.STR, ':', '')    ; * -> 143205 (filename-safe)
+   STORED.NAME = NAME.PART : '_' : TODAY.STR : '_' : TIME.STR : EXT.PART
+
+   * ---- Verify source exists, then let the OS copy the file in one shot
+   * ---- (avoids an O(n) BASIC READSEQ/WRITESEQ loop for large files) ------
+   OPENSEQ SOURCE.PATH TO F.SRC ELSE
+      ERR.MSG = 'Cannot open source file: ' : SOURCE.PATH
+      STORED.NAME = ''
+      RETURN
+   END
+   CLOSESEQ F.SRC
+
+   DEST.PATH = FILE.STORE.DIR : '/' : STORED.NAME
+   EXECUTE '!cp "' : SOURCE.PATH : '" "' : DEST.PATH : '" 2>&1' CAPTURING COPY.OUT
+   IF COPY.OUT NE '' THEN
+      ERR.MSG = 'Cannot create stored file: ' : STORED.NAME : ' - ' : COPY.OUT
+      STORED.NAME = ''
+      RETURN
+   END
+
+   RETURN
+*=============================================================================
+END

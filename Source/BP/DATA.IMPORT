@@ -1,0 +1,677 @@
+PROGRAM DATA.IMPORT
+*=============================================================================
+* DATA.IMPORT
+*
+* Purpose:
+*   Main driver for the Excel/CSV import pipeline. Displays an interactive
+*   "Data Import and Maintenance" screen, then orchestrates, in order:
+*     1. Gather run parameters (source, delimiter, MV file, mode)
+*     2. Resolve the source (local path already, or Google Drive fetch)
+*     3. Store a dated copy of the incoming file (for comparison history)
+*     4. Parse the CSV/tab file into header + data rows
+*     5. Build/update DICT items from the header row
+*     6. Load or compare-and-update each data row into the MV file
+*     7. Update the control record (current/prior load history)
+*
+*   Day-1 (FILE.TYPE = FULL):  every row is written, no comparison.
+*   Day-2+ (FILE.TYPE = UPDATE): each row is compared against what is
+*     already stored (which reflects the prior load) and only rows that
+*     are new or changed are written.
+*
+* Usage:
+*   Called interactively - prompts:
+*     Source data file path (Local(L) or Remote(R))
+*     Local File Path, or remote Google Drive file name
+*     Delimitter type (Comma(C)/Tab(T)/Pipe(P))
+*     MV File Name
+*     Mode (Full Load(F) or Update(U))
+*     Are you OK to Proceed (Y/N)
+*=============================================================================
+   
+   $CATALOGUE
+
+   $INCLUDE IMPORT.EQUATES
+
+   EQU CONTROL.FILE TO 'IMPORT.CONTROL'
+   EQU IMPORT.ARCHIVE.DIR TO 'import.archive'
+   EQU SOURCE.ARCHIVE.DIR TO 'import.archive/source'
+   EQU DIFF.ARCHIVE.DIR TO 'import.archive/diff'
+   EQU CHANGELOG.ARCHIVE.DIR TO 'import.archive/changelog'
+   EQU WORK.DIR TO 'import.work'
+
+   * Common column width so every prompt's ':' lines up on screen.
+   PROMPT.W = 56
+
+   CRT @(-1)
+
+   * -------------------------------------------------------------------
+   * 1. Verify that the one-time import dependencies are configured.
+   * -------------------------------------------------------------------
+   CONFIGURED = 0
+   OPEN IMPORT.CONFIG.FILE TO F.CONFIG THEN
+      READ CONFIG.STATUS FROM F.CONFIG, IMPORT.CONFIG.ID THEN
+         IF CONFIG.STATUS = IMPORT.CONFIG.READY THEN CONFIGURED = 1
+      END
+   END
+
+   IF CONFIGURED NE 1 THEN
+      CRT 'Data Import dependencies are not installed.'
+      CRT 'Please run INSTALL.IMPORT.CONFIG first.'
+      STOP
+   END
+
+   EXECUTE '!mkdir -p "' : SOURCE.ARCHIVE.DIR : '" "' : DIFF.ARCHIVE.DIR : '" "' : CHANGELOG.ARCHIVE.DIR : '" "' : WORK.DIR : '" 2>&1' CAPTURING MKDIR.OUT
+   EXECUTE '!rm -rf "' : WORK.DIR : '"/* 2>&1' CAPTURING CLEANUP.OUT
+
+   * -------------------------------------------------------------------
+   * 2. Header banner
+   *    One SD account can be shared by multiple OS users, so the actual
+   *    OS login (not just the account) is captured for the control record.
+   * -------------------------------------------------------------------
+   ACCOUNT.NAME = @LOGNAME
+   EXECUTE '!whoami' CAPTURING OS.USER
+   RUN.USER     = TRIM(OS.USER)
+   TODAY.DISP   = OCONV(DATE(), 'D2/')
+
+   CRT 'Account : ' : ACCOUNT.NAME : SPACE(18) : 'User : ' : RUN.USER : SPACE(10) : 'Date/Time : ' : TODAY.DISP
+   CRT
+   CRT SPACE(22) : 'Data Import and Maintenance'
+   CRT STR('-', 60)
+   CRT
+
+   * -------------------------------------------------------------------
+   * 3. Gather run parameters
+   *    Typing 'End' (any case) at any prompt below exits immediately.
+   * -------------------------------------------------------------------
+SRC.MODE.RETRY:
+   PROMPT.LBL = 'Source mode (Local=L, Remote=R) [L]'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+   INPUT SRC.MODE
+   ANSWER = SRC.MODE ; GOSUB CHECK.END
+   IF TRIM(SRC.MODE) = '' THEN SRC.MODE = 'L'
+   SRC.MODE = UPCASE(SRC.MODE)
+   IF SRC.MODE # 'L' AND SRC.MODE # 'R' THEN
+      CRT 'Please enter L for local or R for remote.'
+      GOTO SRC.MODE.RETRY
+   END
+
+   IF SRC.MODE = 'R' THEN
+REMOTE.NAME.RETRY:
+      PROMPT.LBL = 'Remote file name'
+      CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+      INPUT DRIVE.NAME
+      ANSWER = DRIVE.NAME ; GOSUB CHECK.END
+      DRIVE.NAME = TRIM(CHANGE(DRIVE.NAME, CHAR(13), ''))
+      IF DRIVE.NAME = '' THEN
+         CRT 'Remote file name is required.'
+         GOTO REMOTE.NAME.RETRY
+      END
+      SOURCE.REF = 'DRIVE:' : DRIVE.NAME
+   END ELSE
+SOURCE.DIR.RETRY:
+      PROMPT.LBL = 'Source directory'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ':'
+   CRT '  > ':
+      INPUT SOURCE.DIR
+      ANSWER = SOURCE.DIR ; GOSUB CHECK.END
+      SOURCE.DIR = TRIM(CHANGE(SOURCE.DIR, CHAR(13), ''))
+      IF SOURCE.DIR = '' THEN
+         CRT 'Source directory is required.'
+         GOTO SOURCE.DIR.RETRY
+      END
+      CRT
+
+SOURCE.NAME.RETRY:
+      PROMPT.LBL = 'Source file name'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ':'
+   CRT '  > ':
+      INPUT SOURCE.NAME
+      ANSWER = SOURCE.NAME ; GOSUB CHECK.END
+      SOURCE.NAME = TRIM(CHANGE(SOURCE.NAME, CHAR(13), ''))
+      IF SOURCE.NAME = '' THEN
+         CRT 'Source file name is required.'
+         GOTO SOURCE.NAME.RETRY
+      END
+
+      IF SOURCE.DIR[LEN(SOURCE.DIR), 1] = '/' THEN
+         SOURCE.REF = SOURCE.DIR : SOURCE.NAME
+      END ELSE
+         SOURCE.REF = SOURCE.DIR : '/' : SOURCE.NAME
+      END
+   END
+
+   * Excel conversion and the standard import CSV use comma separation.
+   DELIM = 'COMMA'
+
+   * -------------------------------------------------------------------
+   * 4. Resolve source (email attachment already local, or Google Drive)
+   *    Python/SR.FILE.FETCH is only needed for a Drive fetch or to
+   *    convert a real .xlsx/.xls workbook to CSV; plain local CSV/tab
+   *    files are used as-is.
+   * -------------------------------------------------------------------
+   SOURCE.UC = UPCASE(SOURCE.REF)
+   NEEDS.FETCH = 0
+   IF SRC.MODE = 'R' THEN NEEDS.FETCH = 1
+   IF LEN(SOURCE.UC) >= 5 AND SOURCE.UC[LEN(SOURCE.UC) - 4, 5] = '.XLSX' THEN NEEDS.FETCH = 1
+   IF LEN(SOURCE.UC) >= 4 AND SOURCE.UC[LEN(SOURCE.UC) - 3, 4] = '.XLS' THEN NEEDS.FETCH = 1
+
+   IF NEEDS.FETCH THEN
+      CALL SR.FILE.FETCH(SOURCE.REF, SOURCE.PATH, ERR.MSG)
+      IF ERR.MSG NE '' THEN
+         CRT 'SOURCE FETCH FAILED: ' : ERR.MSG
+         GOSUB CLEANUP.WORK
+         STOP
+      END
+   END ELSE
+      SOURCE.PATH = SOURCE.REF
+   END
+
+   IF SOURCE.PATH[1, 9] # 'MANIFEST:' THEN
+      OPENSEQ SOURCE.PATH TO F.SOURCE.CHECK ELSE
+         CRT 'Source file not found: ' : SOURCE.PATH
+         GOSUB CLEANUP.WORK
+         STOP
+      END
+      CLOSESEQ F.SOURCE.CHECK
+   END
+
+   MANIFEST.MULTI.RUN = 0
+   IF SOURCE.PATH[1, 9] = 'MANIFEST:' THEN
+      MANIFEST.PATH = SOURCE.PATH[10, LEN(SOURCE.PATH) - 9]
+      GOSUB SELECT.SHEET.FROM.MANIFEST
+      IF ERR.MSG NE '' THEN
+         CRT 'SHEET SELECTION FAILED: ' : ERR.MSG
+         GOSUB CLEANUP.WORK
+         STOP
+      END
+      IF MANIFEST.MULTI.RUN THEN
+         GOSUB RUN.MANIFEST.IMPORTS
+         GOSUB CLEANUP.WORK
+         STOP
+      END
+   END
+
+TARGET.FILE.RETRY:
+   CRT
+   PROMPT.LBL = 'Target MV file name'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+   INPUT DATA.FILE
+   ANSWER = DATA.FILE ; GOSUB CHECK.END
+   DATA.FILE = TRIM(CHANGE(DATA.FILE, CHAR(13), ''))
+   IF DATA.FILE = '' THEN
+      CRT 'Target MV file name is required.'
+      GOTO TARGET.FILE.RETRY
+   END
+   CONTROL.ID = DATA.FILE
+
+   PROMPT.LBL = 'Create DICT synonyms (Y/N) [N]'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+   INPUT CREATE.SYNONYMS
+   ANSWER = CREATE.SYNONYMS ; GOSUB CHECK.END
+   IF TRIM(CREATE.SYNONYMS) = '' THEN CREATE.SYNONYMS = 'N'
+   * Synonym creation is currently disabled in SR.DICT.BUILD.
+
+   GOSUB SHOW.LAST.LOAD
+
+LOAD.MODE.RETRY:
+   PROMPT.LBL = 'Load mode (Full=F, Update=U) [F]'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+   INPUT MODE.CODE
+   ANSWER = MODE.CODE ; GOSUB CHECK.END
+   IF TRIM(MODE.CODE) = '' THEN MODE.CODE = 'F'
+   IF UPCASE(MODE.CODE) = 'U' OR UPCASE(MODE.CODE) = 'UPDATE' THEN
+      FILE.TYPE = FT.UPDATE
+   END ELSE IF UPCASE(MODE.CODE) = 'F' OR UPCASE(MODE.CODE) = 'FULL' THEN
+      FILE.TYPE = FT.FULL
+   END ELSE
+      CRT 'Please enter F for full load or U for update.'
+      GOTO LOAD.MODE.RETRY
+   END
+
+   CRT
+   CRT STR('-', 60)
+   CRT 'Import preview'
+   CRT STR('-', 60)
+   CRT 'Source directory : ' : SOURCE.DIR
+   CRT 'Source file      : ' : SOURCE.NAME
+   IF SRC.MODE = 'R' THEN CRT 'Source reference : ' : SOURCE.REF
+   CRT 'Target : ' : DATA.FILE
+   CRT 'Mode   : ' : FILE.TYPE
+   CRT STR('-', 60)
+   PROMPT.LBL = 'Proceed with import (Y/N)'
+   CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
+   INPUT PROCEED
+   ANSWER = PROCEED ; GOSUB CHECK.END
+   IF UPCASE(PROCEED) NE 'Y' THEN
+      CRT 'Cancelled.'
+      GOSUB CLEANUP.WORK
+      STOP
+   END
+
+   CRT
+   GOSUB IMPORT.CURRENT.SOURCE
+   IF ERR.MSG NE '' THEN
+      CRT 'IMPORT FAILED : ' : ERR.MSG
+      GOSUB CLEANUP.WORK
+      STOP
+   END
+
+   CRT STR('-', 60)
+   CRT 'Import complete.'
+   CRT 'Log file : ' : RUN.LOG.PATH : '  (view with IMPORT.LOG.VIEW)'
+   GOSUB CLEANUP.WORK
+
+   STOP
+
+* -------------------------------------------------------------------
+* Shared prompt guard: typing 'End' at any question exits the program.
+* -------------------------------------------------------------------
+CHECK.END:
+   IF UPCASE(TRIM(ANSWER)) = 'END' THEN
+      CRT
+      CRT 'Exiting Data Import.'
+      GOSUB CLEANUP.WORK
+      STOP
+   END
+RETURN
+
+CLEANUP.WORK:
+   EXECUTE '!rm -rf "' : WORK.DIR : '"/* 2>&1' CAPTURING CLEANUP.OUT
+RETURN
+
+* -------------------------------------------------------------------
+* Checklist for workbook manifest mode.
+* Source remains one file per run; user chooses target MV files for all
+* prepared sheet CSV files in a single execution.
+* -------------------------------------------------------------------
+SELECT.SHEET.FROM.MANIFEST:
+   ERR.MSG = ''
+   SHEET.COUNT = 0
+   SHEET.NAME = ''
+   SHEET.PATH = ''
+   SHEET.ROWS = ''
+   SHEET.SELECTED = ''
+
+   OPENSEQ MANIFEST.PATH TO F.MANIFEST ELSE
+      ERR.MSG = 'Cannot open workbook manifest: ' : MANIFEST.PATH
+      RETURN
+   END
+
+   LOOP
+      READSEQ MAN.LINE FROM F.MANIFEST ELSE EXIT
+
+      IF MAN.LINE[LEN(MAN.LINE), 1] = CHAR(13) THEN
+         MAN.LINE = MAN.LINE[1, LEN(MAN.LINE) - 1]
+      END
+      IF TRIM(MAN.LINE) = '' THEN CONTINUE
+
+      SHEET.COUNT += 1
+      SHEET.NAME<SHEET.COUNT> = FIELD(MAN.LINE, '|', 1)
+      SHEET.PATH<SHEET.COUNT> = FIELD(MAN.LINE, '|', 2)
+      SHEET.ROWS<SHEET.COUNT> = FIELD(MAN.LINE, '|', 3)
+   REPEAT
+   CLOSESEQ F.MANIFEST
+
+   IF SHEET.COUNT = 0 THEN
+      ERR.MSG = 'Workbook manifest had no importable sheets: ' : MANIFEST.PATH
+      RETURN
+   END
+
+   CRT
+   CRT 'Detected table sheets:'
+   FOR SHEET.NO = 1 TO SHEET.COUNT
+      CRT '  [' : SHEET.NO : '] ' : SHEET.NAME<SHEET.NO> : ' (' : SHEET.ROWS<SHEET.NO> : ' rows)'
+   NEXT SHEET.NO
+
+   * Auto-select all detected sheets and skip checklist prompts.
+   FOR SHEET.NO = 1 TO SHEET.COUNT
+      SHEET.SELECTED<SHEET.NO> = 1
+   NEXT SHEET.NO
+
+   SELECTED.COUNT = 0
+   FOR SHEET.NO = 1 TO SHEET.COUNT
+      IF SHEET.SELECTED<SHEET.NO> THEN SELECTED.COUNT += 1
+   NEXT SHEET.NO
+   IF SELECTED.COUNT = 0 THEN
+      ERR.MSG = 'No sheets selected.'
+      RETURN
+   END
+
+   CRT
+MANIFEST.MODE.RETRY:
+   CRT 'Load mode for selected sheets (Full=F, Update=U) [F] : ':
+   INPUT MODE.CODE
+   ANSWER = MODE.CODE ; GOSUB CHECK.END
+   IF TRIM(MODE.CODE) = '' THEN MODE.CODE = 'F'
+   IF UPCASE(MODE.CODE) = 'U' OR UPCASE(MODE.CODE) = 'UPDATE' THEN
+      FILE.TYPE = FT.UPDATE
+   END ELSE IF UPCASE(MODE.CODE) = 'F' OR UPCASE(MODE.CODE) = 'FULL' THEN
+      FILE.TYPE = FT.FULL
+   END ELSE
+      CRT 'Please enter F for full load or U for update.'
+      GOTO MANIFEST.MODE.RETRY
+   END
+
+   CRT 'Create DICT synonyms (Y/N) [N]            : ':
+   INPUT CREATE.SYNONYMS
+   ANSWER = CREATE.SYNONYMS ; GOSUB CHECK.END
+   IF TRIM(CREATE.SYNONYMS) = '' THEN CREATE.SYNONYMS = 'N'
+
+   RUN.COUNT = 0
+   RUN.SHEET.NAME = ''
+   RUN.SOURCE.PATH = ''
+   RUN.TARGET.FILE = ''
+
+   FOR SHEET.NO = 1 TO SHEET.COUNT
+      IF NOT(SHEET.SELECTED<SHEET.NO>) THEN CONTINUE
+TARGET.RETRY:
+      CRT 'Target MV file for [' : SHEET.NO : '] ' : SHEET.NAME<SHEET.NO> : ' : ':
+      INPUT TARGET.NAME
+      ANSWER = TARGET.NAME ; GOSUB CHECK.END
+      TARGET.NAME = TRIM(CHANGE(TARGET.NAME, CHAR(13), ''))
+      IF TARGET.NAME = '' THEN
+         CRT 'Target name is required.'
+         GOTO TARGET.RETRY
+      END
+      FOR EXISTING.NO = 1 TO RUN.COUNT
+         IF UPCASE(RUN.TARGET.FILE<EXISTING.NO>) = UPCASE(TARGET.NAME) THEN
+            CRT 'This target was already assigned to another sheet.'
+            GOTO TARGET.RETRY
+         END
+      NEXT EXISTING.NO
+
+      RUN.COUNT += 1
+      RUN.SHEET.NAME<RUN.COUNT> = SHEET.NAME<SHEET.NO>
+      RUN.SOURCE.PATH<RUN.COUNT> = SHEET.PATH<SHEET.NO>
+      RUN.TARGET.FILE<RUN.COUNT> = TARGET.NAME
+   NEXT SHEET.NO
+
+   IF RUN.COUNT = 0 THEN
+      ERR.MSG = 'No sheets selected for import.'
+      RETURN
+   END
+
+   CRT
+   CRT STR('-', 78)
+   CRT 'Batch import plan:'
+   FOR RUN.NO = 1 TO RUN.COUNT
+      CRT '  [' : RUN.NO : '] ' : RUN.SHEET.NAME<RUN.NO> : ' -> ' : RUN.TARGET.FILE<RUN.NO>
+   NEXT RUN.NO
+   CRT 'Mode   : ' : FILE.TYPE
+   CRT 'Proceed with import (Y/N)                 : ':
+   INPUT PROCEED
+   ANSWER = PROCEED ; GOSUB CHECK.END
+   IF UPCASE(PROCEED) NE 'Y' THEN
+      ERR.MSG = 'Cancelled by user.'
+      GOSUB CLEANUP.WORK
+      RETURN
+   END
+
+   MANIFEST.MULTI.RUN = 1
+
+RETURN
+
+* -------------------------------------------------------------------
+* Show last load summary (one line) for current CONTROL.ID.
+* -------------------------------------------------------------------
+SHOW.LAST.LOAD:
+   LAST.LOAD.FOUND = 0
+   OPEN CONTROL.FILE TO F.CONTROL THEN
+      READ CONTROL.REC FROM F.CONTROL, CONTROL.ID THEN
+         LAST.LOAD.FOUND = 1
+      END
+   END
+   IF LAST.LOAD.FOUND THEN
+      LAST.SKIPPED = CONTROL.REC<CTRL.CURR.SKIPPED>
+      IF LAST.SKIPPED = '' THEN LAST.SKIPPED = CONTROL.REC<CTRL.CURR.SKIPPED.LEGACY>
+      CRT 'Last load  : ' : OCONV(CONTROL.REC<CTRL.CURR.DATE>, 'D4/') : ' ' : OCONV(CONTROL.REC<CTRL.CURR.TIME>, 'MTS') : '  ' : CONTROL.REC<CTRL.CURR.TYPE> : '  (Added=' : CONTROL.REC<CTRL.CURR.ADDED> : ' Changed=' : CONTROL.REC<CTRL.CURR.CHANGED> : ' Skipped=' : LAST.SKIPPED : ' Deleted=' : CONTROL.REC<CTRL.CURR.DELETED> : ')'
+   END ELSE
+      CRT 'Last load  : none'
+   END
+RETURN
+
+* -------------------------------------------------------------------
+* Run all selected manifest sheet imports in one execution.
+* -------------------------------------------------------------------
+RUN.MANIFEST.IMPORTS:
+   BATCH.OK = 0
+   BATCH.FAIL = 0
+
+   CRT
+   CRT STR('-', 60)
+
+   FOR RUN.NO = 1 TO RUN.COUNT
+      SOURCE.PATH = RUN.SOURCE.PATH<RUN.NO>
+      DATA.FILE = RUN.TARGET.FILE<RUN.NO>
+      CONTROL.ID = DATA.FILE
+
+      CRT '[' : RUN.NO : '/' : RUN.COUNT : '] ' : RUN.SHEET.NAME<RUN.NO> : ' -> ' : DATA.FILE
+      GOSUB SHOW.LAST.LOAD
+      GOSUB IMPORT.CURRENT.SOURCE
+      IF ERR.MSG NE '' THEN
+         CRT '  FAILED: ' : ERR.MSG
+         BATCH.FAIL += 1
+         ERR.MSG = ''
+         CRT
+         CONTINUE
+      END
+      BATCH.OK += 1
+      CRT
+   NEXT RUN.NO
+
+   CRT STR('-', 60)
+   CRT 'Batch import complete. Success: ' : BATCH.OK : ', Failed: ' : BATCH.FAIL : '  (details: run IMPORT.LOG.VIEW)'
+RETURN
+
+* -------------------------------------------------------------------
+* Import current SOURCE.PATH into current DATA.FILE.
+* Requires CONTROL.ID, FILE.TYPE, RUN.USER, and DELIM.
+* -------------------------------------------------------------------
+IMPORT.CURRENT.SOURCE:
+   ERR.MSG = ''
+
+   PREV.PATH = ''
+   IF FILE.TYPE = FT.UPDATE AND LAST.LOAD.FOUND THEN
+      PREV.SRC.DIR  = CONTROL.REC<CTRL.CURR.SRC.DIR>
+      PREV.SRC.NAME = CONTROL.REC<CTRL.CURR.SRC.NAME>
+      IF PREV.SRC.DIR NE '' AND PREV.SRC.NAME NE '' THEN
+         CANDIDATE.PREV = PREV.SRC.DIR : '/' : PREV.SRC.NAME
+         OPENSEQ CANDIDATE.PREV TO F.PREV.CHECK THEN
+            PREV.PATH = CANDIDATE.PREV
+            CLOSESEQ F.PREV.CHECK
+         END
+      END
+
+      IF PREV.PATH = '' THEN
+         CALL SR.IMPORT.LOG('No previous archive found for diffing - last load recorded source: ' : PREV.SRC.DIR : '/' : PREV.SRC.NAME : ' (missing, moved, or first load for this target)', RUN.LOG.PATH)
+      END
+   END
+
+   IF FILE.TYPE = FT.UPDATE AND PREV.PATH = '' THEN
+      IF LAST.LOAD.FOUND = 0 THEN
+         ERR.MSG = 'UPDATE STOPPED: this is the first run. Select Full Load (F) first; no records were changed.'
+      END ELSE
+         ERR.MSG = 'UPDATE STOPPED: previous source archive is unavailable; no records were changed.'
+      END
+      CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
+      GOSUB CLEANUP.WORK
+      RETURN
+   END
+
+   USE.DIFF = 0
+   CHANGE.LOG.PATH = ''
+
+   IF FILE.TYPE = FT.UPDATE AND PREV.PATH NE '' THEN
+      CALL SR.DATA.DIFF(PREV.PATH, SOURCE.PATH, DIFF.ARCHIVE.DIR, CHANGELOG.ARCHIVE.DIR, REPORT.PATH, CHANGE.LOG.PATH, ADDED.CNT, CHANGED.CNT.DIFF, DELETED.CNT, TOTAL.CNT, HEADER.ROW, ERR.MSG)
+      IF ERR.MSG NE '' THEN
+         ERR.MSG = 'UPDATE STOPPED: diff unavailable; no records were changed. ' : ERR.MSG
+         CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
+         RETURN
+      END ELSE
+         CALL SR.DATA.PARSE(REPORT.PATH, DELIM, REPORT.HEADER, REPORT.ROWS, REPORT.COUNT, ERR.MSG)
+         IF ERR.MSG NE '' THEN
+            ERR.MSG = 'UPDATE STOPPED: diff report unreadable; no records were changed. ' : ERR.MSG
+            CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
+            RETURN
+         END ELSE
+            USE.DIFF  = 1
+            ROW.COUNT = TOTAL.CNT
+            CALL SR.IMPORT.LOG('Diff report saved as: ' : REPORT.PATH, RUN.LOG.PATH)
+            CALL SR.IMPORT.LOG('Parsed ' : ROW.COUNT : ' data rows (via diff), ' : DCOUNT(HEADER.ROW, @VM) : ' columns', RUN.LOG.PATH)
+            IF DELETED.CNT > 0 THEN
+               CRT
+               CRT 'WARNING: ' : DELETED.CNT : ' record(s) are missing from the new source.'
+               CRT 'These records will be deleted from target: ' : DATA.FILE
+               CRT 'Confirm deletion (Y/N)                 : ':
+               INPUT DELETE.PROCEED
+               ANSWER = DELETE.PROCEED ; GOSUB CHECK.END
+               IF UPCASE(DELETE.PROCEED) NE 'Y' THEN
+                  ERR.MSG = 'Update cancelled; no deleted records were applied.'
+                  RETURN
+               END
+            END
+         END
+      END
+   END
+
+   IF NOT(USE.DIFF) THEN
+      CALL SR.DATA.PARSE(SOURCE.PATH, DELIM, HEADER.ROW, DATA.ROWS, ROW.COUNT, ERR.MSG)
+      IF ERR.MSG NE '' THEN
+         ERR.MSG = 'PARSE FAILED: ' : ERR.MSG
+         RETURN
+      END
+      CALL SR.IMPORT.LOG('Parsed ' : ROW.COUNT : ' data rows, ' : DCOUNT(HEADER.ROW, @VM) : ' columns', RUN.LOG.PATH)
+   END
+
+   * A completed earlier load leaves a control item. If that target can no
+   * longer open, do not silently create a replacement after its VOC pointer
+   * was removed or damaged.
+   TARGET.KNOWN = 0
+   OPEN CONTROL.FILE TO F.CONTROL.GUARD THEN
+      READ CONTROL.GUARD.REC FROM F.CONTROL.GUARD, CONTROL.ID THEN
+         TARGET.KNOWN = 1
+      END
+      CLOSE F.CONTROL.GUARD
+   END
+
+   OPEN DATA.FILE TO F.DATA ELSE
+      IF TARGET.KNOWN THEN
+         ERR.MSG = 'Cannot open existing target MV file: ' : DATA.FILE : '. Its VOC pointer may be missing or invalid; no replacement file was created.'
+         CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
+         RETURN
+      END
+      EXECUTE 'CREATE.FILE ' : DATA.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN DATA.FILE TO F.DATA ELSE
+         ERR.MSG = 'Cannot create/open data file: ' : DATA.FILE : ' - ' : CREATE.OUT
+         RETURN
+      END
+   END
+
+   NEXT.ATTR = DATA.START.ATTR
+   CALL SR.DICT.BUILD(DATA.FILE, HEADER.ROW, NEXT.ATTR, ERR.MSG)
+   IF ERR.MSG NE '' THEN
+      CLOSE F.DATA
+      ERR.MSG = 'DICT BUILD FAILED: ' : ERR.MSG
+      RETURN
+   END
+   CALL SR.IMPORT.LOG('Dictionary verified/updated.', RUN.LOG.PATH)
+
+   NEW.COUNT     = 0
+   CHANGED.COUNT = 0
+   SKIPPED.COUNT = 0
+   DELETED.COUNT = 0
+   WRITE.ERROR.COUNT = 0
+
+   IF USE.DIFF THEN
+      NEW.COUNT     = ADDED.CNT
+      CHANGED.COUNT = CHANGED.CNT.DIFF
+      DELETED.COUNT = DELETED.CNT
+      SKIPPED.COUNT = ROW.COUNT - ADDED.CNT - CHANGED.CNT.DIFF
+
+      NUM.ROWS = DCOUNT(REPORT.ROWS, @FM)
+      FOR ROW.NO = 1 TO NUM.ROWS
+         ROW = REPORT.ROWS<ROW.NO>
+         IF ROW<1, 1> = 'DELETE' THEN
+            DEL.REC.ID = ROW<1, 2>
+            DELETE.OK = 1
+            DELETE F.DATA, DEL.REC.ID ON ERROR DELETE.OK = 0
+            IF DELETE.OK = 0 THEN
+               WRITE.ERROR.COUNT += 1
+               CALL SR.IMPORT.LOG('DELETE FAILED (row ' : ROW.NO : ', REC.ID=' : DEL.REC.ID : ')', RUN.LOG.PATH)
+            END
+            CONTINUE
+         END
+         DEL ROW<1, 1>
+         CALL SR.RECORD.BUILD(ROW, DATA.START.ATTR, REC.ID, NEW.REC, BUILD.ERR)
+         IF BUILD.ERR NE '' THEN CONTINUE
+         WRITE.OK = 1
+         WRITE NEW.REC TO F.DATA, REC.ID ON ERROR WRITE.OK = 0
+         IF WRITE.OK = 0 THEN
+            WRITE.ERROR.COUNT += 1
+            CALL SR.IMPORT.LOG('WRITE FAILED (row ' : ROW.NO : ', REC.ID=' : REC.ID : ')', RUN.LOG.PATH)
+         END
+      NEXT ROW.NO
+   END ELSE
+      NUM.ROWS = DCOUNT(DATA.ROWS, @FM)
+
+      FOR ROW.NO = 1 TO NUM.ROWS
+         ROW = DATA.ROWS<ROW.NO>
+         CALL SR.RECORD.BUILD(ROW, DATA.START.ATTR, REC.ID, NEW.REC, BUILD.ERR)
+         IF BUILD.ERR NE '' THEN CONTINUE
+         WRITE.OK = 1
+         WRITE NEW.REC TO F.DATA, REC.ID ON ERROR WRITE.OK = 0
+         IF WRITE.OK = 0 THEN
+            WRITE.ERROR.COUNT += 1
+            CALL SR.IMPORT.LOG('WRITE FAILED (row ' : ROW.NO : ', REC.ID=' : REC.ID : ')', RUN.LOG.PATH)
+            CONTINUE
+         END
+         NEW.COUNT += 1
+      NEXT ROW.NO
+   END
+
+   IF WRITE.ERROR.COUNT > 0 THEN
+      ERR.MSG = 'IMPORT FAILED: ' : WRITE.ERROR.COUNT : ' write/delete operation(s) failed; control history was not updated.'
+      CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
+      RETURN
+   END
+
+   CALL SR.LOAD.FILE(SOURCE.PATH, SOURCE.ARCHIVE.DIR, STORED.NAME, ERR.MSG)
+   IF ERR.MSG NE '' THEN
+      ERR.MSG = 'FILE STORE FAILED: ' : ERR.MSG
+      RETURN
+   END
+   STORED.DIR = SOURCE.ARCHIVE.DIR
+   STORED.PATH = STORED.DIR : '/' : STORED.NAME
+   CALL SR.IMPORT.LOG('Stored dated copy as: ' : STORED.PATH, RUN.LOG.PATH)
+
+   CALL SR.IMPORT.LOG('New=' : NEW.COUNT : ' Changed=' : CHANGED.COUNT : ' Skipped=' : SKIPPED.COUNT : ' Deleted=' : DELETED.COUNT : ' WriteErrors=' : WRITE.ERROR.COUNT, RUN.LOG.PATH)
+
+   RESULT.LINE = '  Result : New=' : NEW.COUNT : '  Changed=' : CHANGED.COUNT : '  Skipped=' : SKIPPED.COUNT
+   IF DELETED.COUNT > 0 THEN RESULT.LINE := '  Deleted=' : DELETED.COUNT
+   IF WRITE.ERROR.COUNT > 0 THEN RESULT.LINE := '  Errors=' : WRITE.ERROR.COUNT
+   CRT RESULT.LINE
+
+   CTRL.DIFF.PATH = ''
+   IF USE.DIFF THEN
+      CTRL.DIFF.PATH = REPORT.PATH
+   END
+   CALL SR.CONTROL.UPDATE(CONTROL.FILE, CONTROL.ID, FILE.TYPE, ROW.COUNT, NEW.COUNT, CHANGED.COUNT, DELETED.COUNT, CTRL.DIFF.PATH, CHANGE.LOG.PATH, RUN.USER, STORED.PATH, SKIPPED.COUNT, ERR.MSG)
+   IF ERR.MSG NE '' THEN
+      ERR.MSG = 'CONTROL UPDATE FAILED: ' : ERR.MSG
+      RETURN
+   END
+
+   IF NEEDS.FETCH THEN
+      EXECUTE '!rm -f "' : SOURCE.PATH : '" 2>&1' CAPTURING CLEANUP.OUT
+   END
+RETURN
+
+   END
+*=============================================================================
+* OPEN ITEM - not yet resolved with client:
+*   Deletion detection: if a RecID present in the prior load is absent from
+*   today's file, is it deleted from the MV file, or does deletion only
+*   happen via an explicit FT.DELETED file? Add a pass here once confirmed,
+*   comparing REC.IDs from the previous archive/control record against
+*   today's incoming REC.IDs.
+*=============================================================================
