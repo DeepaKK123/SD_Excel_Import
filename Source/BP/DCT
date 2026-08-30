@@ -22,6 +22,12 @@ PROGRAM DCT
       IF DATA.FILE = '' THEN CONTINUE
       IF UPCASE(DATA.FILE) = 'END' OR UPCASE(DATA.FILE) = 'QUIT' THEN EXIT
 
+      OPEN DATA.FILE TO F.DATA ELSE
+         CRT
+         CRT 'Error: Cannot open target MV file: ' : DATA.FILE
+         CONTINUE
+      END
+
       CRT
       CRT 'Report view'
       CRT STR('-', 30)
@@ -50,7 +56,7 @@ PROGRAM DCT
 
       CRT
       CRT STR('-', 78)
-      CRT 'Press Enter for another target file, or Q to quit: ':
+   CRT 'Press Enter (E) for another target file, or Q to quit: ':
       INPUT NEXT.ACTION
       NEXT.ACTION = UPCASE(TRIM(CHANGE(NEXT.ACTION, CHAR(13), '')))
       IF NEXT.ACTION = 'Q' OR NEXT.ACTION = 'QUIT' THEN EXIT

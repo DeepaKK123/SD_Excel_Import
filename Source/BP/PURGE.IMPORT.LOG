@@ -17,11 +17,11 @@ PROGRAM PURGE.IMPORT.LOG
    CRT 'Log directory : ' : IMPORT.LOG.DIR
    CRT
 
-   OPENSEQ IMPORT.LOG.DIR TO F.CHECK ELSE
+   OPEN IMPORT.LOG.DIR TO F.CHECK ELSE
       CRT 'Log directory does not exist yet - nothing to purge.'
       STOP
    END
-   CLOSESEQ F.CHECK
+   CLOSE F.CHECK
 
    CRT 'Delete log files older than how many days [30] : ':
    INPUT RETENTION.DAYS

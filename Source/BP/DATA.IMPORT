@@ -18,14 +18,7 @@ PROGRAM DATA.IMPORT
 *     already stored (which reflects the prior load) and only rows that
 *     are new or changed are written.
 *
-* Usage:
-*   Called interactively - prompts:
-*     Source data file path (Local(L) or Remote(R))
-*     Local File Path, or remote Google Drive file name
-*     Delimitter type (Comma(C)/Tab(T)/Pipe(P))
-*     MV File Name
-*     Mode (Full Load(F) or Update(U))
-*     Are you OK to Proceed (Y/N)
+* 
 *=============================================================================
    
    $CATALOGUE
@@ -34,9 +27,9 @@ PROGRAM DATA.IMPORT
 
    EQU CONTROL.FILE TO 'IMPORT.CONTROL'
    EQU IMPORT.ARCHIVE.DIR TO 'import.archive'
-   EQU SOURCE.ARCHIVE.DIR TO 'import.archive/source'
-   EQU DIFF.ARCHIVE.DIR TO 'import.archive/diff'
-   EQU CHANGELOG.ARCHIVE.DIR TO 'import.archive/changelog'
+   EQU SOURCE.ARCHIVE.DIR TO 'import.archive.source'
+   EQU DIFF.ARCHIVE.DIR TO 'import.archive.diff'
+   EQU CHANGELOG.ARCHIVE.DIR TO 'import.archive.changelog'
    EQU WORK.DIR TO 'import.work'
 
    * Common column width so every prompt's ':' lines up on screen.
@@ -60,8 +53,16 @@ PROGRAM DATA.IMPORT
       STOP
    END
 
-   EXECUTE '!mkdir -p "' : SOURCE.ARCHIVE.DIR : '" "' : DIFF.ARCHIVE.DIR : '" "' : CHANGELOG.ARCHIVE.DIR : '" "' : WORK.DIR : '" 2>&1' CAPTURING MKDIR.OUT
-   EXECUTE '!rm -rf "' : WORK.DIR : '"/* 2>&1' CAPTURING CLEANUP.OUT
+   CREATE.CMD = 'CREATE.FILE ' : IMPORT.ARCHIVE.DIR : ' DIRECTORY'
+   EXECUTE CREATE.CMD CAPTURING CREATE.OUT
+   CREATE.CMD = 'CREATE.FILE ' : SOURCE.ARCHIVE.DIR : ' DIRECTORY'
+   EXECUTE CREATE.CMD CAPTURING CREATE.OUT
+   CREATE.CMD = 'CREATE.FILE ' : DIFF.ARCHIVE.DIR : ' DIRECTORY'
+   EXECUTE CREATE.CMD CAPTURING CREATE.OUT
+   CREATE.CMD = 'CREATE.FILE ' : CHANGELOG.ARCHIVE.DIR : ' DIRECTORY'
+   EXECUTE CREATE.CMD CAPTURING CREATE.OUT
+   CREATE.CMD = 'CREATE.FILE ' : WORK.DIR : ' DIRECTORY'
+   EXECUTE CREATE.CMD CAPTURING CREATE.OUT
 
    * -------------------------------------------------------------------
    * 2. Header banner
