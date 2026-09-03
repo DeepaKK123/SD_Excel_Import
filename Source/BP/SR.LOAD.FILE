@@ -5,7 +5,6 @@ SUBROUTINE SR.LOAD.FILE(SOURCE.PATH, FILE.STORE.DIR, STORED.NAME, ERR.MSG)
 * Purpose:
 *   Saves a dated copy of the incoming spreadsheet (CSV/tab) file so that
 *   today's load can later be compared against any prior day's load.
-*   This is a pure file-copy operation - no MV/DICT logic here.
 *
 * Parameters:
 *   SOURCE.PATH    (IN)  - Full path of the incoming file

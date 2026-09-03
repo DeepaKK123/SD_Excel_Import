@@ -4,8 +4,7 @@ PROGRAM PURGE.IMPORT.LOG
 *
 * Purpose:
 *   Deletes import log files (see SR.IMPORT.LOG) older than a chosen
-*   retention period. Run manually or scheduled - not called by
-*   DATA.IMPORT itself, so log growth never affects the import run.
+*   retention period. Run manually for now and may be scheduled later.
 *=============================================================================
    $CATALOGUE
 

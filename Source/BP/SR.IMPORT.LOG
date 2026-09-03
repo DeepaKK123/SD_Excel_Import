@@ -4,8 +4,7 @@ SUBROUTINE SR.IMPORT.LOG(MESSAGE, LOG.PATH)
 *
 * Purpose:
 *   Appends one timestamped line to today's import log file, keeping the
-*   DATA.IMPORT screen limited to the few lines a user actually needs while
-*   every diagnostic detail still lands somewhere reviewable.
+*   DATA.IMPORT screen limited.
 *
 * Parameters:
 *   MESSAGE  (IN)  - Text to log (any embedded quotes/newlines are sanitized)

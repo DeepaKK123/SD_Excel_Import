@@ -3,8 +3,7 @@ PROGRAM DCT
 * DCT
 *
 * Purpose:
-*   Main launcher for DCT operations.
-*   Lets users select target MV file and report mode from one entrypoint.
+*   Main launcher for Data Change Tracking operations.
 *=============================================================================
    $CATALOGUE
 
@@ -31,8 +30,7 @@ PROGRAM DCT
       CRT
       CRT 'Report view'
       CRT STR('-', 30)
-      CRT '  1  Change details'
-      CRT '  2  Load summary'
+      CRT '  1  Load summary and diff report path'
       CRT
       PROMPT.LBL = 'Select view [1]'
       CRT PROMPT.LBL : SPACE(PROMPT.W - LEN(PROMPT.LBL)) : ': ':
@@ -41,12 +39,10 @@ PROGRAM DCT
       IF MODE.CODE = '' THEN MODE.CODE = '1'
 
       ERR.MSG = ''
-      IF MODE.CODE = '2' OR UPCASE(MODE.CODE) = 'S' OR UPCASE(MODE.CODE) = 'SUMMARY' THEN
+      IF MODE.CODE = '1' OR MODE.CODE = '2' OR UPCASE(MODE.CODE) = 'S' OR UPCASE(MODE.CODE) = 'SUMMARY' THEN
          CALL SR.IMPORT.SUMMARY.PRINT(DATA.FILE, ERR.MSG)
-      END ELSE IF MODE.CODE = '1' OR UPCASE(MODE.CODE) = 'D' OR UPCASE(MODE.CODE) = 'DETAIL' THEN
-         CALL SR.DCT.DETAIL.VIEW(DATA.FILE, ERR.MSG)
       END ELSE
-         ERR.MSG = 'Please select 1 for details or 2 for the load summary.'
+         ERR.MSG = 'Please select 1 for the load summary.'
       END
 
       IF ERR.MSG # '' THEN

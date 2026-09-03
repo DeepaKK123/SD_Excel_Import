@@ -1,16 +1,16 @@
-SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.CNT, CHANGED.CNT, DELETED.CNT, DIFF.PATH, CHANGE.LOG.PATH, RUN.USER, SOURCE.FILE, SKIPPED.CNT, ERR.MSG)
+SUBROUTINE SR.CONTROL.UPDATE(CTRL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.CNT, CHANGED.CNT, DELETED.CNT, DIFF.PATH, RUN.USER, SOURCE.FILE, SKIPPED.CNT, ERR.MSG)
 *=============================================================================
 * SR.CONTROL.UPDATE
 *
 * Purpose:
 *   Maintains the audit/history record for a given import source.
-*   Reads whatever is currently in attrs 11-21 (the last load's stats)
-*   and shifts them down into attrs 31-41 ("prior load") BEFORE writing
-*   the new load's stats into 11-21 ("current load"). This gives every
+*   Reads whatever is currently in attrs 11 - 30 (the last load's stats)
+*   and shifts them down into attrs 31-50 ("prior load") BEFORE writing
+*   the new load's stats into 11-30 ("current load"). This gives every
 *   control record a two-generation history: current vs. prior.
 *
 * Parameters:
-*   CONTROL.FILE (IN)  - Name of the control file
+*   CTRL.FILE    (IN)  - Name of the control file
 *   CTRL.ID      (IN)  - Control record key (target MV filename)
 *   FILE.TYPE    (IN)  - FT.FULL / FT.UPDATE / FT.PARTIAL / FT.DELETED
 *   REC.COUNT    (IN)  - Number of records processed in this load
@@ -18,7 +18,6 @@ SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.
 *   CHANGED.CNT  (IN)  - Number of changed records this load
 *   DELETED.CNT  (IN)  - Number of records missing from this load
 *   DIFF.PATH    (IN)  - Diff report path for this load, or ''
-*   CHANGE.LOG.PATH (IN) - Detailed before/after change log path, or ''
 *   RUN.USER     (IN)  - OS user that ran this load (one SD account may be
 *                         shared by multiple OS users)
 *   SOURCE.FILE  (IN)  - Dated archive path for this load (not the working
@@ -69,24 +68,12 @@ SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.
       NEXT SLASH.POS
    END
 
-   CHANGE.LOG.NAME = CHANGE.LOG.PATH
-   IF CHANGE.LOG.PATH[1, 1] = '/' THEN
-      * Keep absolute paths intact for older control records.
-   END ELSE IF CHANGE.LOG.PATH[1, LEN(SRC.DIR.PART)] = SRC.DIR.PART THEN
-      CHANGE.LOG.NAME = CHANGE.LOG.PATH[LEN(SRC.DIR.PART) + 2, LEN(CHANGE.LOG.PATH) - LEN(SRC.DIR.PART) - 1]
-   END ELSE
-      FOR SLASH.POS = LEN(CHANGE.LOG.PATH) TO 1 STEP -1
-         IF CHANGE.LOG.PATH[SLASH.POS, 1] = '/' THEN
-            CHANGE.LOG.NAME = CHANGE.LOG.PATH[SLASH.POS + 1, LEN(CHANGE.LOG.PATH) - SLASH.POS]
-            EXIT
-         END
-      NEXT SLASH.POS
-   END
+   IF CTRL.FILE = '' THEN CTRL.FILE = CONTROL.FILE
 
-   OPEN CONTROL.FILE TO F.CTRL ELSE
-      EXECUTE 'CREATE.FILE ' : CONTROL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
-      OPEN CONTROL.FILE TO F.CTRL ELSE
-         ERR.MSG = 'Cannot create/open control file: ' : CONTROL.FILE : ' - ' : CREATE.OUT
+   OPEN CTRL.FILE TO F.CTRL ELSE
+      EXECUTE 'CREATE.FILE ' : CTRL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN CTRL.FILE TO F.CTRL ELSE
+         ERR.MSG = 'Cannot create/open control file: ' : CTRL.FILE : ' - ' : CREATE.OUT
          RETURN
       END
    END
@@ -102,7 +89,6 @@ SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.
    CTRL.REC<CTRL.PRIOR.CHANGED>  = CTRL.REC<CTRL.CURR.CHANGED>
    CTRL.REC<CTRL.PRIOR.DELETED>  = CTRL.REC<CTRL.CURR.DELETED>
    CTRL.REC<CTRL.PRIOR.DIFFPATH> = CTRL.REC<CTRL.CURR.DIFFPATH>
-   CTRL.REC<CTRL.PRIOR.CHANGE.LOG> = CTRL.REC<CTRL.CURR.CHANGE.LOG>
    CTRL.REC<CTRL.PRIOR.ACCOUNT>  = CTRL.REC<CTRL.CURR.ACCOUNT>
    CTRL.REC<CTRL.PRIOR.SRC.DIR>  = CTRL.REC<CTRL.CURR.SRC.DIR>
    CTRL.REC<CTRL.PRIOR.SRC.NAME> = CTRL.REC<CTRL.CURR.SRC.NAME>
@@ -120,7 +106,7 @@ SUBROUTINE SR.CONTROL.UPDATE(CONTROL.FILE, CTRL.ID, FILE.TYPE, REC.COUNT, ADDED.
    CTRL.REC<CTRL.CURR.CHANGED>  = CHANGED.CNT
    CTRL.REC<CTRL.CURR.DELETED>  = DELETED.CNT
    CTRL.REC<CTRL.CURR.DIFFPATH> = DIFF.NAME
-   CTRL.REC<CTRL.CURR.CHANGE.LOG> = CHANGE.LOG.NAME
+   CTRL.REC<CTRL.CURR.CHANGE.LOG> = ''
    CTRL.REC<CTRL.CURR.ACCOUNT>  = RUN.USER
    CTRL.REC<CTRL.CURR.SRC.DIR>  = SRC.DIR.PART
    CTRL.REC<CTRL.CURR.SRC.NAME> = SRC.NAME.PART

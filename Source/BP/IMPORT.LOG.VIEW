@@ -3,10 +3,7 @@ PROGRAM IMPORT.LOG.VIEW
 * IMPORT.LOG.VIEW
 *
 * Purpose:
-*   Views the detailed import run log written by SR.IMPORT.LOG (one file
-*   per day, IMPORT.LOG.DIR/import_YYYY-MM-DD.log) - the diagnostic detail
-*   DATA.IMPORT no longer prints to screen (stored-copy paths, diff/parse
-*   row counts, per-row write failures, etc.).
+*   Views the detailed import run log written by SR.IMPORT.LOG 
 *=============================================================================
    $CATALOGUE
 
@@ -18,7 +15,7 @@ PROGRAM IMPORT.LOG.VIEW
    CRT 'Log directory : ' : IMPORT.LOG.DIR
    CRT
 
-   LIST.CMD = '!find "' : IMPORT.LOG.DIR : '" -maxdepth 1 -type f -name "import_*.log" -printf "%f\n" 2>/dev/null | sort -r'
+   LIST.CMD = '!find "' : IMPORT.LOG.DIR   BASIC BP DATA.IMPORT DCT IMPORT.LOG.VIEW INSTALL.IMPORT.CONFIG PURGE.IMPORT.LOG SR.CONTROL.DICT.BUILD SR.CONTROL.UPDATE SR.DATA.DIFF SR.DATA.PARSE SR.DCT.DETAIL.VIEW SR.DICT.BUILD SR.FILE.FETCH SR.IMPORT.CONFIG.CHECK SR.IMPORT.LOG SR.IMPORT.PATH.RESOLVE SR.IMPORT.SUMMARY.PRINT SR.LOAD.FILE SR.RECORD.BUILD UPDATE.IMPORT.CONFIG : '" -maxdepth 1 -type f -name "import_*.log" -printf "%f\n" 2>/dev/null | sort -r'
    EXECUTE LIST.CMD CAPTURING FILE.LIST
 
    FILE.COUNT = 0
@@ -69,7 +66,7 @@ PROGRAM IMPORT.LOG.VIEW
       READSEQ LOG.LINE FROM F.LOG ELSE EXIT
       IF FILTER.TEXT NE '' AND INDEX(UPCASE(LOG.LINE), UPCASE(FILTER.TEXT), 1) = 0 THEN CONTINUE
 
-      CRT LOG.LINE
+      GOSUB DISPLAY.LOG.LINE
       SHOWN.COUNT += 1
       LINE.COUNT += 1
       IF LINE.COUNT >= 20 THEN
@@ -86,5 +83,57 @@ PROGRAM IMPORT.LOG.VIEW
    CRT SHOWN.COUNT : ' line(s) shown.'
 
    STOP
+
+* -------------------------------------------------------------------
+* Present standard import-run entries with short, readable labels.
+* Unknown messages remain visible exactly as written to the log.
+* -------------------------------------------------------------------
+DISPLAY.LOG.LINE:
+   LOG.TIME = LOG.LINE[1, 8]
+   LOG.MESSAGE = TRIM(LOG.LINE[11, LEN(LOG.LINE) - 10])
+
+   IF LOG.MESSAGE = '------------- IMPORT STARTED -------------' THEN
+      CRT
+      CRT LOG.TIME : '  ------------- IMPORT STARTED -------------'
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Target: ', 1) = 1 THEN
+      CRT '          ' : LOG.MESSAGE
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Update comparison report: ', 1) = 1 THEN
+      CRT '          Comparison report: ' : LOG.MESSAGE[27, LEN(LOG.MESSAGE) - 26]
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Source records: ', 1) = 1 THEN
+      CRT '          ' : LOG.MESSAGE
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Data dictionary: ', 1) = 1 THEN
+      CRT '          Dictionary: ' : LOG.MESSAGE[18, LEN(LOG.MESSAGE) - 17]
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Source archive copy: ', 1) = 1 THEN
+      CRT '          Archive copy: ' : LOG.MESSAGE[22, LEN(LOG.MESSAGE) - 21]
+      RETURN
+   END
+
+   IF INDEX(LOG.MESSAGE, 'Import results | ', 1) = 1 THEN
+      CRT '          Results: ' : LOG.MESSAGE[18, LEN(LOG.MESSAGE) - 17]
+      RETURN
+   END
+
+   IF LOG.MESSAGE = '------------- IMPORT COMPLETED -------------' THEN
+      CRT LOG.TIME : ' ------------- IMPORT COMPLETED -------------'
+      RETURN
+   END
+
+   CRT LOG.LINE
+   RETURN
 *=============================================================================
 END

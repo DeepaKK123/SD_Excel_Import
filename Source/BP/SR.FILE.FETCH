@@ -5,35 +5,21 @@ SUBROUTINE SR.FILE.FETCH(SOURCE.REF, LOCAL.PATH, ERR.MSG)
 * Purpose:
 *   Resolves the incoming file reference to a local plain CSV/tab file that
 *   the rest of the import pipeline (SR.LOAD.FILE, SR.DATA.PARSE, ...) can
-*   open with OPENSEQ. Client sends files two ways:
-*     - Emailed attachment: someone saves it to a local folder on the
-*       server by hand - already just a local path.
-*     - Google Drive: file lives on Google's servers and must be
-*       downloaded (and converted to CSV if it's a real .xlsx) first.
-*   Both cases are delegated to scripts/sd_file_fetch.py (Python), since
-*   Drive access and Excel-binary conversion aren't practical in BASIC.
-*   Any informational conversion messages (for example, skipped workbook
-*   sheets or merged-row totals) are surfaced to the operator before the
-*   final OK:/ERR: sentinel is parsed.
+*   open with OPENSEQ.
 *
 * Parameters:
-*   SOURCE.REF  (IN)  - Either a plain local path (e.g.
-*                        '/home/sd/import/incoming/customers.csv'), or a
-*                        'DRIVE:<file-name>' reference to fetch from Drive.
+*   SOURCE.REF  (IN)  - Either a plain local path  or a remote reference.
 *   LOCAL.PATH  (OUT) - Local filesystem path ready for SR.LOAD.FILE, or
 *                        '' on failure.
 *   ERR.MSG     (OUT) - Empty string on success, description on failure.
 *
-* Prerequisites for the DRIVE: path (see scripts/sd_file_fetch.py header):
-*   rclone installed + configured with a remote, and openpyxl installed if
-*   the client sends true binary .xlsx files.
 *=============================================================================
    $CATALOGUE
 
    $INCLUDE SDPYFUNC.H
 
    EQU FETCH.SCRIPT   TO 'scripts/sd_file_fetch.py'
-   EQU STAGING.DIR    TO 'import.work'
+   EQU STAGING.DIR    TO 'IMPORT.WORK'
 
    LOCAL.PATH = ''
    ERR.MSG    = ''

@@ -5,9 +5,9 @@ SUBROUTINE SR.DICT.BUILD(DATA.FILE, HEADER.ROW, NEXT.ATTR, ERR.MSG)
 * Purpose:
 *   For each column name in HEADER.ROW, ensures a matching DICT item
 *   exists in the dictionary of DATA.FILE. Creates any that are missing.
-*   Existing columns (matched on original column name, DICT attr 4) are
-*   left untouched and reuse their existing attribute number - this keeps
-*   attribute numbering stable across repeated loads.
+*   Existing columns (matched on original column name, DICT attr 4) retain
+*   their attribute number, but their conversion code is cleared so imported
+*   values remain text.
 *
 * Parameters:
 *   DATA.FILE  (IN)     - Name of the MV data file whose DICT is updated
@@ -24,7 +24,6 @@ SUBROUTINE SR.DICT.BUILD(DATA.FILE, HEADER.ROW, NEXT.ATTR, ERR.MSG)
 *   - DICT attr 4   = display name, spaces preserved
 *                     (kept because future files reference columns by
 *                      their original name)
-*   - No synonym items are created. Each source column gets one D-type item.
 *=============================================================================
 
    $CATALOGUE
@@ -86,6 +85,10 @@ FIND.EXISTING.COLUMN:
       READNEXT SCAN.ID ELSE EXIT
       READ SCAN.REC FROM F.DICT, SCAN.ID THEN
          IF SCAN.REC<DICT.NAME.ATTR> = COL.NAME THEN
+            IF SCAN.REC<DICT.CONV.ATTR> NE '' THEN
+               SCAN.REC<DICT.CONV.ATTR> = ''
+               WRITE SCAN.REC TO F.DICT, SCAN.ID
+            END
             FOUND.ATTR = 1
             EXIT
          END

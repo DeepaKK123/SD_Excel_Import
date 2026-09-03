@@ -11,9 +11,6 @@ SUBROUTINE SR.DCT.DETAIL.VIEW(DATA.FILE, ERR.MSG)
 
    $INCLUDE IMPORT.EQUATES
 
-   EQU CONTROL.FILE TO 'IMPORT.CONTROL'
-   EQU AUDIT.FILE   TO 'IMPORT.DCT.AUDIT'
-
    ERR.MSG = ''
    DATA.FILE = TRIM(CHANGE(DATA.FILE, CHAR(13), ''))
    IF DATA.FILE = '' THEN
@@ -33,9 +30,9 @@ SUBROUTINE SR.DCT.DETAIL.VIEW(DATA.FILE, ERR.MSG)
    END
 
    LOG.FILE = CONTROL.REC<CTRL.CURR.CHANGE.LOG>
-   CALL SR.IMPORT.PATH.RESOLVE(CONTROL.REC<CTRL.CURR.SRC.DIR>, LOG.FILE, LOG.PATH)
+   CALL SR.IMPORT.PATH.RESOLVE('', LOG.FILE, LOG.PATH)
    IF LOG.PATH = '' THEN
-      ERR.MSG = 'No detailed change log is recorded for the current run.'
+      ERR.MSG = 'No detailed change log is recorded. Change details are available after a successful update import.'
       CLOSE F.CONTROL
       RETURN
    END

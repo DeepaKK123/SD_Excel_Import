@@ -1,4 +1,4 @@
-SUBROUTINE SR.CONTROL.DICT.BUILD(CONTROL.FILE, ERR.MSG)
+SUBROUTINE SR.CONTROL.DICT.BUILD(CTRL.FILE, ERR.MSG)
 *=============================================================================
 * SR.CONTROL.DICT.BUILD
 *
@@ -7,7 +7,7 @@ SUBROUTINE SR.CONTROL.DICT.BUILD(CONTROL.FILE, ERR.MSG)
 *   Centralizes control-dictionary maintenance for install/upgrade programs.
 *
 * Parameters:
-*   CONTROL.FILE (IN)  - Control filename (normally IMPORT.CONTROL)
+*   CTRL.FILE    (IN)  - Control filename (normally IMPORT.CONTROL)
 *   ERR.MSG      (OUT) - Empty on success, description on failure
 *=============================================================================
    $CATALOGUE
@@ -15,19 +15,20 @@ SUBROUTINE SR.CONTROL.DICT.BUILD(CONTROL.FILE, ERR.MSG)
    $INCLUDE IMPORT.EQUATES
 
    ERR.MSG = ''
+   IF CTRL.FILE = '' THEN CTRL.FILE = CONTROL.FILE
 
-   OPEN CONTROL.FILE TO F.CTRL ELSE
-      EXECUTE 'CREATE.FILE ' : CONTROL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
-      OPEN CONTROL.FILE TO F.CTRL ELSE
-         ERR.MSG = 'Cannot create/open control file: ' : CONTROL.FILE : ' - ' : CREATE.OUT
+   OPEN CTRL.FILE TO F.CTRL ELSE
+      EXECUTE 'CREATE.FILE ' : CTRL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN CTRL.FILE TO F.CTRL ELSE
+         ERR.MSG = 'Cannot create/open control file: ' : CTRL.FILE : ' - ' : CREATE.OUT
          RETURN
       END
    END
 
-   OPEN 'DICT', CONTROL.FILE TO F.CTRL.DICT ELSE
-      EXECUTE 'CREATE.FILE ' : CONTROL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
-      OPEN 'DICT', CONTROL.FILE TO F.CTRL.DICT ELSE
-         ERR.MSG = 'Cannot create/open dictionary for file: ' : CONTROL.FILE : ' - ' : CREATE.OUT
+   OPEN 'DICT', CTRL.FILE TO F.CTRL.DICT ELSE
+      EXECUTE 'CREATE.FILE ' : CTRL.FILE : ' DYNAMIC' CAPTURING CREATE.OUT
+      OPEN 'DICT', CTRL.FILE TO F.CTRL.DICT ELSE
+         ERR.MSG = 'Cannot create/open dictionary for file: ' : CTRL.FILE : ' - ' : CREATE.OUT
          CLOSE F.CTRL
          RETURN
       END
@@ -76,7 +77,7 @@ WRITE.ID.DICT:
    ID.REC<DICT.TYPE.ATTR>   = 'D'
    ID.REC<DICT.LOC.ATTR>    = 0
    ID.REC<DICT.CONV.ATTR>   = ''
-   ID.REC<DICT.NAME.ATTR>   = CONTROL.FILE
+   ID.REC<DICT.NAME.ATTR>   = CTRL.FILE
    ID.REC<DICT.FORMAT.ATTR> = '50L'
    ID.REC<DICT.SM.ATTR>     = 'S'
    ID.REC<DICT.ASSOC.ATTR>  = ''

@@ -5,9 +5,6 @@
 * $INCLUDE this file into any program/subroutine that participates in the
 * import pipeline so attribute numbers and file-type codes stay consistent
 * across the whole subsystem.
-*
-* Author:  <your name>
-* Project: Excel Import Automation - Client: Bruce
 *=============================================================================
 
 * --- Data record layout -----------------------------------------------
@@ -67,8 +64,14 @@ EQU DICT.FORMAT.ATTR   TO 5          ; * Display format, e.g. '20L'
 EQU DICT.SM.ATTR       TO 6          ; * 'S' or 'M'
 EQU DICT.ASSOC.ATTR    TO 7          ; * Association (blank when unused)
 
-* --- Misc ------------------------------------------------------------------
-EQU IMPORT.LOG.DIR TO 'import.logs'  ; * Detailed run log, one file per day (see SR.IMPORT.LOG / PURGE.IMPORT.LOG)
+* --- Standard File & Directory equates (capitalized for MV CREATE.FILE compatibility) ---
+EQU CONTROL.FILE          TO 'IMPORT.CONTROL'
+EQU AUDIT.FILE            TO 'IMPORT.DCT.AUDIT'
+EQU SOURCE.ARCHIVE.DIR    TO 'IMPORT.SOURCE'
+EQU DIFF.ARCHIVE.DIR      TO 'IMPORT.DIFF'
+EQU CHANGELOG.ARCHIVE.DIR TO 'IMPORT.ARCHIVE.CHANGELOG'
+EQU WORK.DIR              TO 'IMPORT.WORK'
+EQU IMPORT.LOG.DIR        TO 'IMPORT.LOGS'  ; * Detailed run log, one file per day (see SR.IMPORT.LOG / PURGE.IMPORT.LOG)
 
 * --- Import installation status --------------------------------------------
 EQU IMPORT.CONFIG.FILE   TO 'IMPORT.CONFIG'

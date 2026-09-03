@@ -33,8 +33,11 @@ import io
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from decimal import Decimal
+from datetime import date, datetime, time
 from pathlib import Path
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 if '__file__' in globals():
     SCRIPT_DIR = Path(globals()['__file__']).resolve().parent
@@ -88,11 +91,70 @@ def ensure_python_dependencies():
 def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
     ensure_python_dependencies()
     import openpyxl
+    from openpyxl.styles.numbers import is_date_format
 
-    def _clean_cell(value):
+    def _raw_numeric_cells(workbook_path):
+        namespace = {'main': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        cells_by_sheet = {}
+        with ZipFile(workbook_path) as archive:
+            workbook = ElementTree.fromstring(archive.read('xl/workbook.xml'))
+            relationships = ElementTree.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+            targets = {
+                rel.attrib['Id']: rel.attrib['Target']
+                for rel in relationships
+            }
+            for sheet in workbook.findall('main:sheets/main:sheet', namespace):
+                rel_id = sheet.attrib.get(
+                    '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id'
+                )
+                target = targets.get(rel_id, '')
+                sheet_path = target.lstrip('/')
+                if not sheet_path.startswith('xl/'):
+                    sheet_path = 'xl/' + sheet_path
+                root = ElementTree.fromstring(archive.read(sheet_path))
+                raw_cells = {}
+                for cell in root.findall('.//main:c', namespace):
+                    if cell.attrib.get('t') not in (None, 'n'):
+                        continue
+                    value = cell.find('main:v', namespace)
+                    if value is not None and value.text is not None:
+                        raw_cells[cell.attrib['r']] = value.text
+                cells_by_sheet[sheet.attrib['name']] = raw_cells
+        return cells_by_sheet
+
+    raw_cells_by_sheet = _raw_numeric_cells(xlsx_path)
+
+    def _clean_cell(value, raw_numeric_text='', is_date_cell=False):
         if value is None:
             return ''
-        text = str(value).strip()
+        if is_date_cell and raw_numeric_text != '':
+            try:
+                from openpyxl.utils.datetime import from_excel
+                date_serial = Decimal(raw_numeric_text)
+                if date_serial < 0:
+                    return ''
+                parsed_date = from_excel(float(date_serial))
+                if getattr(parsed_date, 'year', 0) >= 9999:
+                    return ''
+            except (OverflowError, TypeError, ValueError):
+                return ''
+        if is_date_cell and isinstance(value, datetime):
+            text = value.strftime('%Y-%m-%d %H:%M:%S')
+        elif is_date_cell and isinstance(value, date):
+            text = value.strftime('%Y-%m-%d')
+        elif is_date_cell and isinstance(value, time):
+            text = value.strftime('%H:%M:%S')
+        elif raw_numeric_text != '':
+            text = format(Decimal(raw_numeric_text), 'f')
+        elif isinstance(value, float):
+            # Never emit Excel numeric values in scientific notation. The
+            # import pipeline stores every cell as text, so use fixed-point
+            # text before writing the staging CSV.
+            text = format(Decimal(str(value)), 'f')
+        elif isinstance(value, int):
+            text = str(value)
+        else:
+            text = str(value).strip()
         # BASIC parser is line-based; embedded newlines would split one row
         # into multiple physical lines and corrupt Record IDs.
         text = text.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
@@ -172,23 +234,23 @@ def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
         # Diffing indexes rows by ID, so omitting line/split values collapses
         # otherwise distinct rows during update imports.
         if sheet_mode == 'splits' and po_val != '' and line_val != '' and split_val != '':
-            return f'{po_val}|{line_val}|{split_val}'
-        if sheet_mode == 'lines' and po_val != '' and line_val != '':
-            return f'{po_val}|{line_val}'
-
-        # Preserve an explicit source key when the composite parts are absent.
-        if first_col != '':
-            return first_col
-
-        if po_val != '':
+            record_id = f'{po_val}|{line_val}|{split_val}'
+        elif sheet_mode == 'lines' and po_val != '' and line_val != '':
+            record_id = f'{po_val}|{line_val}'
+        elif first_col != '':
+            record_id = first_col
+        elif po_val != '':
             if sheet_mode == 'splits' and line_val != '':
-                return f'{po_val}|{line_val}'
-            return po_val
+                record_id = f'{po_val}|{line_val}'
+            else:
+                record_id = po_val
+        else:
+            record_id = first_col
 
-        return first_col
+        return re.sub(r'\s*-\s*', '-', record_id.strip()).replace(' ', '-')
 
     def _extract_sheet_table(ws):
-        rows = list(ws.iter_rows(values_only=True))
+        rows = list(ws.iter_rows())
         if not rows:
             return None
 
@@ -198,13 +260,15 @@ def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
 
         for idx in range(scan_limit):
             row = rows[idx]
-            width = sum(1 for value in row if value not in (None, ''))
+            width = sum(1 for cell in row if cell.value not in (None, ''))
             if width < 2:
                 continue
 
             non_empty_next = 0
             for probe in rows[idx + 1:idx + 6]:
-                probe_width = sum(1 for value in probe[:len(row)] if value not in (None, ''))
+                probe_width = sum(
+                    1 for cell in probe[:len(row)] if cell.value not in (None, '')
+                )
                 if probe_width > 0:
                     non_empty_next += 1
 
@@ -218,18 +282,30 @@ def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
 
         raw_header = rows[header_index]
         last_non_blank = -1
-        for idx, value in enumerate(raw_header):
-            if value not in (None, ''):
+        for idx, cell in enumerate(raw_header):
+            if cell.value not in (None, ''):
                 last_non_blank = idx
         if last_non_blank < 1:
             return None
 
-        header = [_clean_cell(value) for value in raw_header[:last_non_blank + 1]]
+        header = [_clean_cell(cell.value) for cell in raw_header[:last_non_blank + 1]]
 
         data_rows = []
         blank_streak = 0
         for row in rows[header_index + 1:]:
-            values = [_clean_cell(value) for value in row[:len(header)]]
+            values = [
+                _clean_cell(
+                    cell.value,
+                    raw_cells_by_sheet.get(ws.title, {}).get(
+                        getattr(cell, 'coordinate', ''),
+                        '',
+                    ),
+                    getattr(cell, 'is_date', False) or is_date_format(
+                        getattr(cell, 'number_format', '')
+                    ),
+                )
+                for cell in row[:len(header)]
+            ]
             if all(value == '' for value in values):
                 blank_streak += 1
                 if blank_streak >= 5 and data_rows:
@@ -284,7 +360,7 @@ def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
         seen_rec_ids = set()
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['REC_ID'] + header)
+            writer.writerow(header)
             for row_no, row in enumerate(data_rows, start=1):
                 rec_id = _build_rec_id(
                     row,
@@ -301,7 +377,7 @@ def xlsx_to_csvs_with_manifest(xlsx_path, staging_dir):
                     fail(f"Duplicate record ID '{rec_id}' in sheet '{sheet_name}'")
                 seen_rec_ids.add(rec_id)
 
-                writer.writerow([rec_id] + row)
+                writer.writerow(row)
         info(f"Prepared sheet '{sheet_name}' -> {csv_path} ({len(data_rows)} rows)")
         manifest_lines.append(f"{sheet_name}|{csv_path}|{len(data_rows)}")
 
@@ -319,6 +395,11 @@ def main():
     if len(sys.argv) == 2 and sys.argv[1] == '--install-dependencies':
         ensure_python_dependencies()
         print('PYTHON_DEP_OK')
+        return
+
+    if len(sys.argv) in (5, 6) and sys.argv[1] == '--diff':
+        Path(sys.argv[4]).mkdir(parents=True, exist_ok=True)
+        diff_csv(sys.argv[2], sys.argv[3], sys.argv[4])
         return
 
     if len(sys.argv) == 4 and sys.argv[1] == '--parse':
@@ -361,7 +442,8 @@ def _to_sd_text(value):
 
 def parse_csv(path, delimiter_name):
     delimiters = {'COMMA': ',', 'TAB': '\t', 'PIPE': '|'}
-    delimiter = delimiters.get(delimiter_name.upper(), delimiter_name)
+    delimiter = delimiters.get(str(delimiter_name).upper(), str(delimiter_name) if delimiter_name else ',')
+    rows = []
     try:
         with open(path, newline='', encoding='utf-8-sig') as source:
             rows = list(csv.reader(source, delimiter=delimiter))
@@ -370,6 +452,11 @@ def parse_csv(path, delimiter_name):
 
     if not rows:
         fail(f'CSV file is empty: {path}')
+    
+    # If the file is a diff report (starts with 'Status'), we skip the Status column
+    # when doing uniqueness checks on the actual Record ID (Column B).
+    is_diff_report = len(rows[0]) > 0 and rows[0][0].strip().upper() == 'STATUS'
+    
     header = [_to_sd_text(cell) for cell in rows[0]]
     data_rows = [
         [_to_sd_text(cell) for cell in row]
@@ -379,9 +466,14 @@ def parse_csv(path, delimiter_name):
     seen_ids = set()
     parsed_rows = []
     for row_number, row in enumerate(data_rows, start=2):
-        if not row or row[0].strip() == '':
+        if not row:
             continue
-        record_id = row[0].strip()
+        # For diff report, the record ID is column 1 (2nd column, after Status column 0).
+        # For standard files, it is column 0.
+        check_col = 1 if is_diff_report and len(row) > 1 else 0
+        if row[check_col].strip() == '':
+            continue
+        record_id = row[check_col].strip()
         if record_id in seen_ids:
             fail(f"Duplicate record ID '{record_id}' in {path} at row {row_number}")
         seen_ids.add(record_id)
@@ -433,14 +525,38 @@ def _normalise_header(header):
     return ''.join(character for character in header.lower() if character.isalnum())
 
 
+def _format_numeric_str(text):
+    text = text.strip()
+    if not text:
+        return ''
+    # Check if text is scientific notation like '8.91480000073513e+19' or '8.9148E+19'
+    if re.match(r'^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$', text):
+        try:
+            val = float(text)
+            if val.is_integer():
+                return str(int(val))
+            # Up to 20 significant digits formatted without scientific exponent
+            return f'{val:.0f}' if abs(val - round(val)) < 1e-5 else str(val)
+        except (ValueError, OverflowError):
+            pass
+    # Float with trailing zero like '123456.0'
+    if re.match(r'^[+-]?\d+\.0$', text):
+        return text[:-2]
+    return text
+
+
 def _normalise_export_value(header, value):
-    text = str(value)
+    text = str(value).strip() if value is not None else ''
     header_key = _normalise_header(header)
-    if header_key in ('lastcheckin', 'lasteassynctime'):
-        if text.strip() == '0001-01-01 00:00:00.0000000':
-            return ''
-    if header_key in ('phonenumber', 'phone') and text.startswith('1'):
-        return text[1:]
+    if header_key in ('phonenumber', 'phone'):
+        phone_digits = ''.join(character for character in text if character.isdigit())
+        if len(phone_digits) == 11 and phone_digits.startswith('1'):
+            return phone_digits[1:]
+        if len(phone_digits) == 10:
+            return phone_digits
+    # Normalize numeric IDs / strings across runs
+    if _is_excel_text_header(header):
+        text = _format_numeric_str(text)
     return text
 
 
@@ -453,12 +569,18 @@ def _normalise_export_row(header, row):
 
 def _is_excel_text_header(header):
     return _normalise_header(header) in {
-        'deviceid', 'imei', 'meid', 'serialnumber', 'phonenumber', 'phone'
+        'deviceid', 'imei', 'meid', 'serialnumber', 'phonenumber', 'phone',
+        'iccid', 'sim', 'simnumber', 'subscriberid', 'eassubscriberid'
     }
 
 
 def _excel_text_value(value):
-    return "'" + str(value) if value != '' else ''
+    if value == '' or value is None:
+        return ''
+    str_val = _format_numeric_str(str(value))
+    if str_val.startswith("'"):
+        return str_val
+    return "'" + str_val
 
 
 def _excel_report_row(header, row):
@@ -468,7 +590,35 @@ def _excel_report_row(header, row):
     ]
 
 
-def diff_csv(old_csv, new_csv, staging_dir, change_log_dir=None):
+def _resolve_mv_file_path(mv_ref):
+    """
+    Resolve a MultiValue file reference (e.g., 'IMPORT.ARCHIVE.CHANGELOG')
+    to its actual file system path. Searches under @HOME for a directory
+    with that name, since MV files are stored as directories in the file system.
+    """
+    if not mv_ref or mv_ref == '':
+        return None
+    
+    # If it already looks like an absolute file system path, use it as-is
+    if mv_ref.startswith('/') or mv_ref.startswith('\\') or ':' in mv_ref:
+        return mv_ref
+    
+    # Try to resolve from HOME directory
+    home = Path.home()
+    found = list(home.glob(f'*/{mv_ref}'))
+    if found:
+        return str(found[0])
+    
+    # Try direct subdirectory of HOME
+    direct = home / mv_ref
+    if direct.is_dir():
+        return str(direct)
+    
+    # Return as-is if not found (let caller decide what to do)
+    return mv_ref
+
+
+def diff_csv(old_csv, new_csv, staging_dir):
     """Compares yesterday's archived CSV against today's CSV, keyed by
     Column A (RecID), and writes a single dated report with a Status column
     (ADD/UPDATE/DELETE) - reviewable directly in Excel, and small enough that
@@ -522,11 +672,7 @@ def diff_csv(old_csv, new_csv, staging_dir, change_log_dir=None):
     run_time = datetime.now()
     timestamp = run_time.strftime('%Y-%m-%d_%H%M%S')
     report_path = Path(staging_dir) / f'{stem}_diff_{timestamp}.csv'
-    if change_log_dir is None:
-        change_log_dir = staging_dir
-    Path(change_log_dir).mkdir(parents=True, exist_ok=True)
-    change_log_path = Path(change_log_dir) / f'{stem}_change_log_{timestamp}.csv'
-
+    
     with open(report_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Status'] + header)
@@ -538,52 +684,11 @@ def diff_csv(old_csv, new_csv, staging_dir, change_log_dir=None):
         for rec_id in deleted_ids:
             writer.writerow(['DELETE'] + _excel_report_row(header, old_rows[rec_id]))
 
-    # Keep detailed before/after values separate from the import report. The
-    # BASIC loader expects the report's original column layout after Status.
-    with open(change_log_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            'TrackID', 'Date', 'Time', 'Action', 'RecordID',
-            'FieldDescription', 'BeforeValue', 'AfterValue'
-        ])
-        track_id = _excel_text_value(run_time.strftime('%Y%m%d%H%M%S'))
-        date_text = run_time.strftime('%Y-%m-%d')
-        time_text = run_time.strftime('%H:%M:%S')
-
-        for rec_id in sorted(added_ids):
-            writer.writerow([
-                track_id, date_text, time_text, 'ADD', _excel_text_value(rec_id),
-                'Entire record', '', 'Added'
-            ])
-
-        for rec_id in sorted(changed_ids):
-            old_row, new_row = old_rows[rec_id], new_rows[rec_id]
-            max_columns = max(len(old_row), len(new_row), len(header))
-            for index in range(max_columns):
-                old_value = old_row[index] if index < len(old_row) else ''
-                new_value = new_row[index] if index < len(new_row) else ''
-                if old_value == new_value:
-                    continue
-                field_name = header[index] if index < len(header) else f'Column{index + 1}'
-                if _is_excel_text_header(field_name):
-                    old_value = _excel_text_value(old_value)
-                    new_value = _excel_text_value(new_value)
-                writer.writerow([
-                    track_id, date_text, time_text, 'UPDATE', _excel_text_value(rec_id),
-                    field_name, old_value, new_value
-                ])
-
-        for rec_id in sorted(deleted_ids):
-            writer.writerow([
-                track_id, date_text, time_text, 'DELETE', _excel_text_value(rec_id),
-                'Entire record', 'Present', 'Deleted'
-            ])
-
-    # Report the new file's header/row count too, so the BASIC caller never
-    # has to re-read the full source CSV just to get what it already has.
+    # The diff report contains Status plus the complete source row, so it is
+    # the single retained change-review file for update imports.
     print(f'DIFF_OK:{report_path}:'
           f'{len(added_ids)}:{len(changed_ids)}:{len(deleted_ids)}:'
-            f'{len(new_rows)}:{"|".join(header)}:{change_log_path}')
+            f'{len(new_rows)}:{"|".join(header)}')
 
 
 def run_embedded():
@@ -620,7 +725,7 @@ def run_embedded():
 
     lines = captured.getvalue().splitlines()
     for line in reversed(lines):
-        if line.startswith(('OK:', 'OKLIST:', 'ERR:', 'PYTHON_DEP_OK', 'PARSE_OK')):
+        if line.startswith(('OK:', 'OKLIST:', 'ERR:', 'PYTHON_DEP_OK', 'PARSE_OK', 'DIFF_OK:')):
             globals()['SD_RESULT'] = line
             return True
     globals()['SD_RESULT'] = 'ERR:Python script produced no result'
@@ -632,7 +737,6 @@ if __name__ == '__main__':
         pass
     elif len(sys.argv) in (5, 6) and sys.argv[1] == '--diff':
         Path(sys.argv[4]).mkdir(parents=True, exist_ok=True)
-        change_log_dir = sys.argv[5] if len(sys.argv) == 6 else None
-        diff_csv(sys.argv[2], sys.argv[3], sys.argv[4], change_log_dir)
+        diff_csv(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         main()

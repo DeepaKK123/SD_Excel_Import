@@ -20,10 +20,7 @@ SUBROUTINE SR.RECORD.BUILD(ROW, START.ATTR, REC.ID, NEW.REC, ERR.MSG)
 *                       (e.g. blank Record ID)
 *
 * Notes:
-*   - This subroutine does not write anything to disk - it only builds the
-*     in-memory record. The caller is responsible for the WRITE.
-*   - Kept separate from the main driver so it can be reused by other
-*     programs/situations that need the same column-to-attribute mapping.
+* This subroutine only builds the in-memory record.
 *=============================================================================
    $CATALOGUE
 
@@ -32,6 +29,10 @@ SUBROUTINE SR.RECORD.BUILD(ROW, START.ATTR, REC.ID, NEW.REC, ERR.MSG)
    ERR.MSG = ''
 
    REC.ID = TRIM(ROW<1, 1>)
+   * Record IDs may not contain spaces. Preserve meaningful hyphens while
+   * removing spaces around them and replacing other spaces with hyphens.
+   REC.ID = CHANGE(REC.ID, ' - ', '-')
+   REC.ID = CHANGE(REC.ID, ' ', '-')
    IF REC.ID = '' THEN
       ERR.MSG = 'Row has a blank Record ID (Column A) - skipped'
       RETURN
@@ -40,7 +41,9 @@ SUBROUTINE SR.RECORD.BUILD(ROW, START.ATTR, REC.ID, NEW.REC, ERR.MSG)
    NUM.COLS = DCOUNT(ROW, @VM)
 
    FOR COL.NO = 2 TO NUM.COLS
-      NEW.REC<COL.NO + (START.ATTR - 2)> = ROW<1, COL.NO>
+      FIELD.VALUE = TRIM(ROW<1, COL.NO>)
+      IF FIELD.VALUE = '-' THEN FIELD.VALUE = ''
+      NEW.REC<COL.NO + (START.ATTR - 2)> = FIELD.VALUE
    NEXT COL.NO
 
    RETURN
