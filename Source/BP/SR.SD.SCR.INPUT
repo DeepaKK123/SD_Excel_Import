@@ -1,0 +1,176 @@
+SUBROUTINE SR.SD.SCR.INPUT(FIELD.LABEL, FIELD.ROW, FIELD.VALUE, ERROR.MESSAGE, ACTION)
+*=============================================================================
+* SR.SCR.INPUT
+*
+* Draws one fixed-position input field. If ERROR.MESSAGE is supplied, the
+* operator must choose C to return to the field or END to leave the screen.
+*=============================================================================
+   $CATALOGUE
+
+   VALUE.COLUMN = 42
+
+   IF FIELD.LABEL = '@IMPORT.FORM' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(21,2):'Data Import and Maintenance':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,6):'Source mode (Local=L, Remote=R) [L]':
+      PRINT @(0,8):'Source directory / remote file name':
+      PRINT @(0,10):'Source file name':
+      PRINT @(0,12):'Target MV file name':
+      PRINT @(0,14):'Create DICT synonyms (Y/N) [N]':
+      PRINT @(0,16):'Load mode (Full=F, Update=U) [F]':
+      PRINT @(0,20):'Proceed with import (Y/N)':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SHEET.FORM' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(24,2):'SD Import - Page 2 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Workbook Sheet Selection':
+      PRINT @(0,6):'Detected sheets:':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.PAGE3.SETUP' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(24,2):'SD Import - Page 3 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Workbook Import Details':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.PAGE1' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(25,2):'SD Import - Page 1 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Source Details':
+      PRINT @(0,7):'Source mode (Local=L, Remote=R) [L]':
+      PRINT @(0,9):'Source directory / remote file name':
+      PRINT @(0,11):'Source file name':
+      PRINT @(0,20):'Enter F=Forward or END=Exit':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.PAGE2' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(25,2):'SD Import - Page 2 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Import Setup':
+      PRINT @(0,7):'Target MV file name':
+      PRINT @(0,9):'Create DICT synonyms (Y/N) [N]':
+      PRINT @(0,11):'Load mode (Full=F, Update=U) [F]':
+      PRINT @(0,20):'Enter F=Forward, B=Back, or END=Exit':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.PAGE3' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(25,2):'SD Import - Page 3 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Review and Process':
+      PRINT @(0,20):'Enter P=Process, B=Back, or END=Exit':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.PAGE4' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(24,2):'SD Import - Page 4 of 4':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Final Review and Process':
+      PRINT @(0,20):'Enter P=Process, B=Back, or END=Exit':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.RESULT' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(25,2):'SD Import - Processing Complete':
+      PRINT @(0,3):STR('-', 78):
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@BATCH.FORM' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(24,2):'Excel Workbook Import Plan':
+      PRINT @(0,3):STR('-', 78):
+      RETURN
+   END
+
+   ACTION = ''
+
+   IF ERROR.MESSAGE NE '' THEN
+ERROR.ACTION.RETRY:
+      PRINT @(0,22):@(-3):ERROR.MESSAGE
+      PRINT @(0,23):@(-3):'Enter C to continue or END to exit: ':
+   INPUT @(36,23) ACTION, 10:
+      ACTION = UPCASE(TRIM(CHANGE(ACTION, CHAR(13), '')))
+      IF ACTION = 'END' THEN RETURN
+      IF ACTION = 'C' OR ACTION = 'CONTINUE' THEN
+         PRINT @(0,22):@(-3):
+         PRINT @(0,23):@(-3):
+      END ELSE
+         PRINT @(0,22):@(-3):'Enter C to continue or END to exit.'
+         GOTO ERROR.ACTION.RETRY
+      END
+   END
+
+   IF FIELD.LABEL = '@VALUE' THEN
+      INPUT @(VALUE.COLUMN,FIELD.ROW) : FIELD.VALUE:
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SHEET.VALUE' THEN
+      INPUT @(VALUE.COLUMN,FIELD.ROW) : FIELD.VALUE:
+      RETURN
+   END
+
+   LABEL.MAX = VALUE.COLUMN - 4
+   INPUT.ROW = FIELD.ROW
+   IF LEN(FIELD.LABEL) > LABEL.MAX THEN
+      SPLIT.POS = 0
+      FOR SCAN.POS = LABEL.MAX TO 1 STEP -1
+         IF FIELD.LABEL[SCAN.POS, 1] = ' ' THEN
+            SPLIT.POS = SCAN.POS
+            EXIT
+         END
+      NEXT SCAN.POS
+      IF SPLIT.POS = 0 THEN SPLIT.POS = LABEL.MAX
+      PRINT @(0,FIELD.ROW):@(-3):FIELD.LABEL[1, SPLIT.POS - 1]:
+      PRINT @(0,FIELD.ROW + 1):@(-3):FIELD.LABEL[SPLIT.POS + 1, LEN(FIELD.LABEL) - SPLIT.POS]:
+      INPUT.ROW = FIELD.ROW + 1
+   END ELSE
+      PRINT @(0,FIELD.ROW):@(-3):FIELD.LABEL:
+      PRINT @(0,FIELD.ROW + 1):@(-3):
+   END
+
+   INPUT @(VALUE.COLUMN,INPUT.ROW) : FIELD.VALUE:
+   RETURN
+*=============================================================================
+END

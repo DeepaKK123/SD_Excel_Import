@@ -37,45 +37,6 @@ SUBROUTINE SR.SCR.INPUT(FIELD.LABEL, FIELD.ROW, FIELD.VALUE, ERROR.MESSAGE, ACTI
       RETURN
    END
 
-   IF FIELD.LABEL = '@SD.PAGE1' THEN
-      CRT @(-1)
-      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
-      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
-      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
-      PRINT @(25,2):'SD Import - Page 1 of 3':
-      PRINT @(0,3):STR('-', 78):
-      PRINT @(0,5):'Source Details':
-      PRINT @(0,7):'Source mode (Local=L, Remote=R) [L]':
-      PRINT @(0,9):'Source directory / remote file name':
-      PRINT @(0,11):'Source file name':
-      RETURN
-   END
-
-   IF FIELD.LABEL = '@SD.PAGE2' THEN
-      CRT @(-1)
-      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
-      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
-      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
-      PRINT @(25,2):'SD Import - Page 2 of 3':
-      PRINT @(0,3):STR('-', 78):
-      PRINT @(0,5):'Import Setup':
-      PRINT @(0,7):'Target MV file name':
-      PRINT @(0,9):'Create DICT synonyms (Y/N) [N]':
-      PRINT @(0,11):'Load mode (Full=F, Update=U) [F]':
-      RETURN
-   END
-
-   IF FIELD.LABEL = '@SD.PAGE3' THEN
-      CRT @(-1)
-      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
-      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
-      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
-      PRINT @(25,2):'SD Import - Page 3 of 3':
-      PRINT @(0,3):STR('-', 78):
-      PRINT @(0,5):'Review and Process':
-      RETURN
-   END
-
    IF FIELD.LABEL = '@BATCH.FORM' THEN
       CRT @(-1)
       PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
@@ -123,7 +84,7 @@ ERROR.ACTION.RETRY:
       PRINT @(0,FIELD.ROW + 1):@(-3):
    END
 
-   INPUT @(VALUE.COLUMN,INPUT.ROW) FIELD.VALUE:
+   INPUT @(VALUE.COLUMN,INPUT.ROW) : FIELD.VALUE:
    RETURN
 *=============================================================================
 END
