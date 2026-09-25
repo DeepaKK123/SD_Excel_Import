@@ -1,0 +1,176 @@
+SUBROUTINE SR.DATA.PARSE.MV(FILEPATH, DELIM, LAYOUT, HEADER.ROW, DATA.ROWS, REC.COUNT, ERR.MSG)
+*=============================================================================
+* SR.DATA.PARSE.MV
+*
+* Reads a delimited or fixed-width file directly in MV BASIC (RFC4180-style
+* quoted fields for delimited mode; embedded delimiters/quotes via doubled
+* ""). Not Excel-specific - works for any delimited/fixed-width text with a
+* header row, including the staged CSV produced by the xlsx conversion.
+* Fields are returned as VM values and rows as FM values.
+*
+* DELIM accepts 'COMMA', 'TAB', 'PIPE', 'SPACE', 'POSITION', or a literal
+* single character; any other/blank value falls back to comma.
+*
+* LAYOUT (only used when DELIM = 'POSITION') is a VM-delimited list of
+* 1-based inclusive column ranges, e.g. '1-20' : @VM : '21-30' : @VM : '31-50'.
+* Applied identically to the header line and every data line. Ignored for
+* all other DELIM values - pass ''.
+*=============================================================================
+
+   HEADER.ROW = ''
+   DATA.ROWS  = ''
+   REC.COUNT  = 0
+   ERR.MSG    = ''
+
+   IS.POSITION = (UPCASE(DELIM) = 'POSITION')
+   IF IS.POSITION THEN
+      LAYOUT.COUNT = DCOUNT(LAYOUT, @VM)
+      IF LAYOUT.COUNT = 0 OR LAYOUT = '' THEN
+         ERR.MSG = 'POSITION mode requires a column LAYOUT (start-end ranges)'
+         RETURN
+      END
+      FOR L = 1 TO LAYOUT.COUNT
+         RANGE.SPEC = LAYOUT<1, L>
+         DASH.POS = INDEX(RANGE.SPEC, '-', 1)
+         IF DASH.POS = 0 THEN
+            ERR.MSG = 'Invalid LAYOUT range (expected start-end): ' : RANGE.SPEC
+            RETURN
+         END
+         LAYOUT.START<L> = TRIM(RANGE.SPEC[1, DASH.POS - 1])
+         LAYOUT.END<L>   = TRIM(RANGE.SPEC[DASH.POS + 1, LEN(RANGE.SPEC) - DASH.POS])
+      NEXT L
+   END ELSE
+      BEGIN CASE
+         CASE UPCASE(DELIM) = 'COMMA' OR DELIM = ''
+            DELIM.CHAR = ','
+         CASE UPCASE(DELIM) = 'TAB'
+            DELIM.CHAR = CHAR(9)
+         CASE UPCASE(DELIM) = 'PIPE'
+            DELIM.CHAR = '|'
+         CASE UPCASE(DELIM) = 'SPACE'
+            DELIM.CHAR = ' '
+         CASE 1
+            DELIM.CHAR = DELIM[1, 1]
+      END CASE
+   END
+
+   OPENSEQ FILEPATH TO F.SOURCE ELSE
+      ERR.MSG = 'Cannot open CSV file: ' : FILEPATH
+      RETURN
+   END
+
+   READSEQ LINE FROM F.SOURCE ELSE
+      CLOSESEQ F.SOURCE
+      ERR.MSG = 'CSV file is empty: ' : FILEPATH
+      RETURN
+   END
+
+   GOSUB PARSE.LINE
+   IF PARSE.ERROR NE '' THEN
+      CLOSESEQ F.SOURCE
+      ERR.MSG = 'CSV header parse failed: ' : PARSE.ERROR
+      RETURN
+   END
+   HEADER.ROW = PARSED.ROW
+   IF HEADER.ROW = '' THEN
+      CLOSESEQ F.SOURCE
+      ERR.MSG = 'CSV header is empty: ' : FILEPATH
+      RETURN
+   END
+
+READ.NEXT:
+   READSEQ LINE FROM F.SOURCE ELSE GOTO CLOSE.SOURCE
+   IF TRIM(LINE) = '' THEN GOTO READ.NEXT
+
+   GOSUB PARSE.LINE
+   IF PARSE.ERROR NE '' THEN
+      CLOSESEQ F.SOURCE
+      ERR.MSG = 'CSV row ' : REC.COUNT + 2 : ' parse failed: ' : PARSE.ERROR
+      RETURN
+   END
+
+   IF PARSED.ROW = '' THEN GOTO READ.NEXT
+   IF PARSED.ROW<1> = '' THEN GOTO READ.NEXT
+
+   REC.COUNT += 1
+   DATA.ROWS<REC.COUNT> = PARSED.ROW
+   GOTO READ.NEXT
+
+CLOSE.SOURCE:
+   CLOSESEQ F.SOURCE
+   RETURN
+
+* Parse one line into PARSED.ROW, using fixed-width or delimited mode.
+* A doubled quote inside a quoted field (delimited mode) represents one
+* quote. Embedded physical newlines are not supported by this line reader.
+PARSE.LINE:
+   PARSED.ROW = ''
+   PARSE.ERROR = ''
+   IF IS.POSITION THEN GOSUB PARSE.LINE.POSITION ; RETURN
+
+   FIELD.VALUE = ''
+   FIELD.NO = 1
+   IN.QUOTE = 0
+   I = 1
+   LINE.LEN = LEN(LINE)
+
+PARSE.CHAR:
+   IF I > LINE.LEN THEN GOTO END.FIELD
+   CHAR.VALUE = LINE[I, 1]
+
+   IF IN.QUOTE THEN
+      IF CHAR.VALUE = CHAR(34) THEN
+         IF I < LINE.LEN AND LINE[I + 1, 1] = CHAR(34) THEN
+            FIELD.VALUE := CHAR(34)
+            I += 2
+            GOTO PARSE.CHAR
+         END
+         IN.QUOTE = 0
+      END ELSE
+         FIELD.VALUE := CHAR.VALUE
+      END
+      I += 1
+      GOTO PARSE.CHAR
+   END
+
+   IF CHAR.VALUE = CHAR(34) THEN
+      IF FIELD.VALUE = '' THEN
+         IN.QUOTE = 1
+      END ELSE
+         PARSE.ERROR = 'Unexpected quote'
+         RETURN
+      END
+   END ELSE IF CHAR.VALUE = DELIM.CHAR THEN
+      PARSED.ROW<1, FIELD.NO> = TRIM(FIELD.VALUE)
+      FIELD.NO += 1
+      FIELD.VALUE = ''
+   END ELSE
+      FIELD.VALUE := CHAR.VALUE
+   END
+
+   I += 1
+   GOTO PARSE.CHAR
+
+END.FIELD:
+   IF IN.QUOTE THEN
+      PARSE.ERROR = 'Unclosed quote'
+      RETURN
+   END
+   PARSED.ROW<1, FIELD.NO> = TRIM(FIELD.VALUE)
+   RETURN
+
+* Slice the line into fixed-width fields per LAYOUT.START/LAYOUT.END.
+PARSE.LINE.POSITION:
+   FOR L = 1 TO LAYOUT.COUNT
+      COL.START = LAYOUT.START<L>
+      COL.END   = LAYOUT.END<L>
+      IF COL.START > LEN(LINE) THEN
+         PARSED.ROW<1, L> = ''
+      END ELSE
+         COL.LEN = COL.END - COL.START + 1
+         PARSED.ROW<1, L> = TRIM(LINE[COL.START, COL.LEN])
+      END
+   NEXT L
+   RETURN
+
+END

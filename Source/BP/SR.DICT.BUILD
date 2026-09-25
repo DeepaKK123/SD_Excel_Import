@@ -99,9 +99,11 @@ FIND.EXISTING.COLUMN:
 *-----------------------------------------------------------------------
 CREATE.DICT.ITEM:
 * Creates a new D-type dictionary item for COL.NAME at NEXT.ATTR,
-* then advances NEXT.ATTR for the following new column.
+* then advances NEXT.ATTR for the following new column. The DICT item ID
+* is uppercased with spaces AND '+' replaced by '-' (display name in
+* attr 4 keeps the original casing/spaces/'+').
 *-----------------------------------------------------------------------
-   DICT.NAME = CHANGE(COL.NAME, ' ', '-')
+   DICT.NAME = UPCASE(CHANGE(CHANGE(COL.NAME, ' ', '-'), '+', '-'))
 
    D.REC = ''
    D.REC<DICT.TYPE.ATTR>    = 'D'

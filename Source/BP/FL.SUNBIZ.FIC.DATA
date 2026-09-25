@@ -1,0 +1,285 @@
+*=============================================================================
+* FL.SUNBIZ.FIC.DATA
+*
+* Fixed-width column layout equates for the Florida SunBiz "Fictitious Name
+* Data File" (record length 2098 characters; data rows have NO header row).
+* Source: FL-SunBiz-Corp+AltName-File-Layout.xlsx, sheet 'SunBiz-AltNames'.
+*
+* OpenQM's EQU statement parses an unquoted comma in the value as starting
+* a NEW 'name TO value' pair (EQU name TO value [, name TO value ...]), so
+* a single 'start,length' value per field does not compile. Each field is
+* therefore two scalar equates, .POS and .LEN, used together:
+*   LINE[FICTITIOUS.NAME.POS, FICTITIOUS.NAME.LEN]   ->   LINE[13, 192]
+*
+* Naming rule: the equate token is the layout's Field Name with spaces
+* replaced by '.' (BASIC identifiers cannot contain '-'). The DICT item
+* name for each field is the same Field Name with spaces replaced by '-'
+* instead - i.e. derived from the equate token by swapping '.' for '-'.
+*
+* FILLER (2088,11) is not a named field in the source layout; it pads the
+* last named field out to the documented total record length.
+*
+* Contains fields for up to 10 owners, starting at field 18; each owner
+* block repeats the same 10 sub-fields (Document Number/Name/Name Format/
+* Address/City/State/Zip/Country/FEI Number/Charter Number).
+*=============================================================================
+
+EQU DOCUMENT.NUMBER.POS          TO 1
+EQU DOCUMENT.NUMBER.LEN          TO 12
+EQU FICTITIOUS.NAME.POS          TO 13
+EQU FICTITIOUS.NAME.LEN          TO 192
+EQU COUNTY.POS                   TO 205
+EQU COUNTY.LEN                   TO 12
+EQU ADDRESS.1.POS                TO 217
+EQU ADDRESS.1.LEN                TO 40
+EQU ADDRESS.2.POS                TO 257
+EQU ADDRESS.2.LEN                TO 40
+EQU CITY.POS                     TO 297
+EQU CITY.LEN                     TO 28
+EQU STATE.POS                    TO 325
+EQU STATE.LEN                    TO 2
+EQU ZIP.POS                      TO 327
+EQU ZIP.LEN                      TO 10
+EQU COUNTRY.POS                  TO 337
+EQU COUNTRY.LEN                  TO 2
+EQU FILING.DATE.POS              TO 339
+EQU FILING.DATE.LEN              TO 8
+EQU NUMBER.OF.PAGES.FILED.POS    TO 347
+EQU NUMBER.OF.PAGES.FILED.LEN    TO 5
+EQU STATUS.POS                   TO 352
+EQU STATUS.LEN                   TO 1
+EQU CANCELATION.DATE.POS         TO 353
+EQU CANCELATION.DATE.LEN         TO 8
+EQU EXPIRATION.DATE.POS          TO 361
+EQU EXPIRATION.DATE.LEN          TO 8
+EQU NUMBER.OF.OWNERS.POS         TO 369
+EQU NUMBER.OF.OWNERS.LEN         TO 5
+EQU FEI.NUMBER.POS               TO 374
+EQU FEI.NUMBER.LEN               TO 14
+EQU MORE.THAN.TEN.OWNERS.FLAG.POS TO 388
+EQU MORE.THAN.TEN.OWNERS.FLAG.LEN TO 1
+
+* --- Owner 1 ----------------------------------------------------------
+EQU OWNER.1.DOCUMENT.NUMBER.POS  TO 389
+EQU OWNER.1.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.1.NAME.POS             TO 401
+EQU OWNER.1.NAME.LEN             TO 55
+EQU OWNER.1.NAME.FORMAT.POS      TO 456
+EQU OWNER.1.NAME.FORMAT.LEN      TO 1
+EQU OWNER.1.ADDRESS.POS          TO 457
+EQU OWNER.1.ADDRESS.LEN          TO 40
+EQU OWNER.1.CITY.POS             TO 497
+EQU OWNER.1.CITY.LEN             TO 28
+EQU OWNER.1.STATE.POS            TO 525
+EQU OWNER.1.STATE.LEN            TO 2
+EQU OWNER.1.ZIP.POS              TO 527
+EQU OWNER.1.ZIP.LEN              TO 10
+EQU OWNER.1.COUNTRY.POS          TO 537
+EQU OWNER.1.COUNTRY.LEN          TO 2
+EQU OWNER.1.FEI.NUMBER.POS       TO 539
+EQU OWNER.1.FEI.NUMBER.LEN       TO 9
+EQU OWNER.1.CHARTER.NUMBER.POS   TO 548
+EQU OWNER.1.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 2 ----------------------------------------------------------
+EQU OWNER.2.DOCUMENT.NUMBER.POS  TO 560
+EQU OWNER.2.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.2.NAME.POS             TO 572
+EQU OWNER.2.NAME.LEN             TO 55
+EQU OWNER.2.NAME.FORMAT.POS      TO 627
+EQU OWNER.2.NAME.FORMAT.LEN      TO 1
+EQU OWNER.2.ADDRESS.POS          TO 628
+EQU OWNER.2.ADDRESS.LEN          TO 40
+EQU OWNER.2.CITY.POS             TO 668
+EQU OWNER.2.CITY.LEN             TO 28
+EQU OWNER.2.STATE.POS            TO 696
+EQU OWNER.2.STATE.LEN            TO 2
+EQU OWNER.2.ZIP.POS              TO 698
+EQU OWNER.2.ZIP.LEN              TO 10
+EQU OWNER.2.COUNTRY.POS          TO 708
+EQU OWNER.2.COUNTRY.LEN          TO 2
+EQU OWNER.2.FEI.NUMBER.POS       TO 710
+EQU OWNER.2.FEI.NUMBER.LEN       TO 9
+EQU OWNER.2.CHARTER.NUMBER.POS   TO 719
+EQU OWNER.2.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 3 ----------------------------------------------------------
+EQU OWNER.3.DOCUMENT.NUMBER.POS  TO 731
+EQU OWNER.3.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.3.NAME.POS             TO 743
+EQU OWNER.3.NAME.LEN             TO 55
+EQU OWNER.3.NAME.FORMAT.POS      TO 798
+EQU OWNER.3.NAME.FORMAT.LEN      TO 1
+EQU OWNER.3.ADDRESS.POS          TO 799
+EQU OWNER.3.ADDRESS.LEN          TO 40
+EQU OWNER.3.CITY.POS             TO 839
+EQU OWNER.3.CITY.LEN             TO 28
+EQU OWNER.3.STATE.POS            TO 867
+EQU OWNER.3.STATE.LEN            TO 2
+EQU OWNER.3.ZIP.POS              TO 869
+EQU OWNER.3.ZIP.LEN              TO 10
+EQU OWNER.3.COUNTRY.POS          TO 879
+EQU OWNER.3.COUNTRY.LEN          TO 2
+EQU OWNER.3.FEI.NUMBER.POS       TO 881
+EQU OWNER.3.FEI.NUMBER.LEN       TO 9
+EQU OWNER.3.CHARTER.NUMBER.POS   TO 890
+EQU OWNER.3.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 4 ----------------------------------------------------------
+EQU OWNER.4.DOCUMENT.NUMBER.POS  TO 902
+EQU OWNER.4.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.4.NAME.POS             TO 914
+EQU OWNER.4.NAME.LEN             TO 55
+EQU OWNER.4.NAME.FORMAT.POS      TO 969
+EQU OWNER.4.NAME.FORMAT.LEN      TO 1
+EQU OWNER.4.ADDRESS.POS          TO 970
+EQU OWNER.4.ADDRESS.LEN          TO 40
+EQU OWNER.4.CITY.POS             TO 1010
+EQU OWNER.4.CITY.LEN             TO 28
+EQU OWNER.4.STATE.POS            TO 1038
+EQU OWNER.4.STATE.LEN            TO 2
+EQU OWNER.4.ZIP.POS              TO 1040
+EQU OWNER.4.ZIP.LEN              TO 10
+EQU OWNER.4.COUNTRY.POS          TO 1050
+EQU OWNER.4.COUNTRY.LEN          TO 2
+EQU OWNER.4.FEI.NUMBER.POS       TO 1052
+EQU OWNER.4.FEI.NUMBER.LEN       TO 9
+EQU OWNER.4.CHARTER.NUMBER.POS   TO 1061
+EQU OWNER.4.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 5 ----------------------------------------------------------
+EQU OWNER.5.DOCUMENT.NUMBER.POS  TO 1073
+EQU OWNER.5.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.5.NAME.POS             TO 1085
+EQU OWNER.5.NAME.LEN             TO 55
+EQU OWNER.5.NAME.FORMAT.POS      TO 1140
+EQU OWNER.5.NAME.FORMAT.LEN      TO 1
+EQU OWNER.5.ADDRESS.POS          TO 1141
+EQU OWNER.5.ADDRESS.LEN          TO 40
+EQU OWNER.5.CITY.POS             TO 1181
+EQU OWNER.5.CITY.LEN             TO 28
+EQU OWNER.5.STATE.POS            TO 1209
+EQU OWNER.5.STATE.LEN            TO 2
+EQU OWNER.5.ZIP.POS              TO 1211
+EQU OWNER.5.ZIP.LEN              TO 10
+EQU OWNER.5.COUNTRY.POS          TO 1221
+EQU OWNER.5.COUNTRY.LEN          TO 2
+EQU OWNER.5.FEI.NUMBER.POS       TO 1223
+EQU OWNER.5.FEI.NUMBER.LEN       TO 9
+EQU OWNER.5.CHARTER.NUMBER.POS   TO 1232
+EQU OWNER.5.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 6 ----------------------------------------------------------
+EQU OWNER.6.DOCUMENT.NUMBER.POS  TO 1244
+EQU OWNER.6.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.6.NAME.POS             TO 1256
+EQU OWNER.6.NAME.LEN             TO 55
+EQU OWNER.6.NAME.FORMAT.POS      TO 1300
+EQU OWNER.6.NAME.FORMAT.LEN      TO 1
+EQU OWNER.6.ADDRESS.POS          TO 1301
+EQU OWNER.6.ADDRESS.LEN          TO 40
+EQU OWNER.6.CITY.POS             TO 1341
+EQU OWNER.6.CITY.LEN             TO 28
+EQU OWNER.6.STATE.POS            TO 1369
+EQU OWNER.6.STATE.LEN            TO 2
+EQU OWNER.6.ZIP.POS              TO 1371
+EQU OWNER.6.ZIP.LEN              TO 10
+EQU OWNER.6.COUNTRY.POS          TO 1381
+EQU OWNER.6.COUNTRY.LEN          TO 2
+EQU OWNER.6.FEI.NUMBER.POS       TO 1383
+EQU OWNER.6.FEI.NUMBER.LEN       TO 9
+EQU OWNER.6.CHARTER.NUMBER.POS   TO 1392
+EQU OWNER.6.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 7 ----------------------------------------------------------
+EQU OWNER.7.DOCUMENT.NUMBER.POS  TO 1404
+EQU OWNER.7.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.7.NAME.POS             TO 1416
+EQU OWNER.7.NAME.LEN             TO 55
+EQU OWNER.7.NAME.FORMAT.POS      TO 1471
+EQU OWNER.7.NAME.FORMAT.LEN      TO 1
+EQU OWNER.7.ADDRESS.POS          TO 1472
+EQU OWNER.7.ADDRESS.LEN          TO 40
+EQU OWNER.7.CITY.POS             TO 1512
+EQU OWNER.7.CITY.LEN             TO 28
+EQU OWNER.7.STATE.POS            TO 1540
+EQU OWNER.7.STATE.LEN            TO 2
+EQU OWNER.7.ZIP.POS              TO 1542
+EQU OWNER.7.ZIP.LEN              TO 10
+EQU OWNER.7.COUNTRY.POS          TO 1552
+EQU OWNER.7.COUNTRY.LEN          TO 2
+EQU OWNER.7.FEI.NUMBER.POS       TO 1554
+EQU OWNER.7.FEI.NUMBER.LEN       TO 9
+EQU OWNER.7.CHARTER.NUMBER.POS   TO 1563
+EQU OWNER.7.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 8 ----------------------------------------------------------
+EQU OWNER.8.DOCUMENT.NUMBER.POS  TO 1575
+EQU OWNER.8.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.8.NAME.POS             TO 1587
+EQU OWNER.8.NAME.LEN             TO 55
+EQU OWNER.8.NAME.FORMAT.POS      TO 1642
+EQU OWNER.8.NAME.FORMAT.LEN      TO 1
+EQU OWNER.8.ADDRESS.POS          TO 1643
+EQU OWNER.8.ADDRESS.LEN          TO 40
+EQU OWNER.8.CITY.POS             TO 1683
+EQU OWNER.8.CITY.LEN             TO 28
+EQU OWNER.8.STATE.POS            TO 1711
+EQU OWNER.8.STATE.LEN            TO 2
+EQU OWNER.8.ZIP.POS              TO 1713
+EQU OWNER.8.ZIP.LEN              TO 10
+EQU OWNER.8.COUNTRY.POS          TO 1723
+EQU OWNER.8.COUNTRY.LEN          TO 2
+EQU OWNER.8.FEI.NUMBER.POS       TO 1725
+EQU OWNER.8.FEI.NUMBER.LEN       TO 9
+EQU OWNER.8.CHARTER.NUMBER.POS   TO 1734
+EQU OWNER.8.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 9 ----------------------------------------------------------
+EQU OWNER.9.DOCUMENT.NUMBER.POS  TO 1746
+EQU OWNER.9.DOCUMENT.NUMBER.LEN  TO 12
+EQU OWNER.9.NAME.POS             TO 1758
+EQU OWNER.9.NAME.LEN             TO 55
+EQU OWNER.9.NAME.FORMAT.POS      TO 1813
+EQU OWNER.9.NAME.FORMAT.LEN      TO 1
+EQU OWNER.9.ADDRESS.POS          TO 1814
+EQU OWNER.9.ADDRESS.LEN          TO 40
+EQU OWNER.9.CITY.POS             TO 1854
+EQU OWNER.9.CITY.LEN             TO 28
+EQU OWNER.9.STATE.POS            TO 1882
+EQU OWNER.9.STATE.LEN            TO 2
+EQU OWNER.9.ZIP.POS              TO 1884
+EQU OWNER.9.ZIP.LEN              TO 10
+EQU OWNER.9.COUNTRY.POS          TO 1894
+EQU OWNER.9.COUNTRY.LEN          TO 2
+EQU OWNER.9.FEI.NUMBER.POS       TO 1896
+EQU OWNER.9.FEI.NUMBER.LEN       TO 9
+EQU OWNER.9.CHARTER.NUMBER.POS   TO 1905
+EQU OWNER.9.CHARTER.NUMBER.LEN   TO 12
+
+* --- Owner 10 ---------------------------------------------------------
+EQU OWNER.10.DOCUMENT.NUMBER.POS TO 1917
+EQU OWNER.10.DOCUMENT.NUMBER.LEN TO 12
+EQU OWNER.10.NAME.POS            TO 1929
+EQU OWNER.10.NAME.LEN            TO 55
+EQU OWNER.10.NAME.FORMAT.POS     TO 1984
+EQU OWNER.10.NAME.FORMAT.LEN     TO 1
+EQU OWNER.10.ADDRESS.POS         TO 1985
+EQU OWNER.10.ADDRESS.LEN         TO 40
+EQU OWNER.10.CITY.POS            TO 2025
+EQU OWNER.10.CITY.LEN            TO 28
+EQU OWNER.10.STATE.POS           TO 2053
+EQU OWNER.10.STATE.LEN           TO 2
+EQU OWNER.10.ZIP.POS             TO 2055
+EQU OWNER.10.ZIP.LEN             TO 10
+EQU OWNER.10.COUNTRY.POS         TO 2065
+EQU OWNER.10.COUNTRY.LEN         TO 2
+EQU OWNER.10.FEI.NUMBER.POS      TO 2067
+EQU OWNER.10.FEI.NUMBER.LEN      TO 9
+EQU OWNER.10.CHARTER.NUMBER.POS  TO 2076
+EQU OWNER.10.CHARTER.NUMBER.LEN  TO 12
+
+EQU FILLER.POS                   TO 2088
+EQU FILLER.LEN                   TO 11
+
+EQU FIC.RECORD.LENGTH            TO 2098

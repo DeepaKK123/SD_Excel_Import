@@ -33,7 +33,7 @@ import io
 import subprocess
 import sys
 import tempfile
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime, time
 from pathlib import Path
 from xml.etree import ElementTree
@@ -529,15 +529,14 @@ def _format_numeric_str(text):
     text = text.strip()
     if not text:
         return ''
-    # Check if text is scientific notation like '8.91480000073513e+19' or '8.9148E+19'
+    # Check if text is scientific notation like '8.91480000073513e+19' or '8.9148E+19'.
+    # Use Decimal (not float) so large IDs (IMEI/serial, 15-20 digits) keep every
+    # digit already present in the text instead of being rounded to float precision.
     if re.match(r'^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$', text):
         try:
-            val = float(text)
-            if val.is_integer():
-                return str(int(val))
-            # Up to 20 significant digits formatted without scientific exponent
-            return f'{val:.0f}' if abs(val - round(val)) < 1e-5 else str(val)
-        except (ValueError, OverflowError):
+            fixed = format(Decimal(text), 'f')
+            return fixed.rstrip('0').rstrip('.') if '.' in fixed else fixed
+        except (InvalidOperation, ValueError):
             pass
     # Float with trailing zero like '123456.0'
     if re.match(r'^[+-]?\d+\.0$', text):

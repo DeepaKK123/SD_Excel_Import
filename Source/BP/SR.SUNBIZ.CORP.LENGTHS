@@ -1,0 +1,36 @@
+SUBROUTINE SR.SUNBIZ.CORP.LENGTHS(LENGTHS.ROW)
+*=============================================================================
+* SR.SUNBIZ.CORP.LENGTHS
+*
+* Purpose:
+*   Returns the field length for each column in SR.SUNBIZ.CORP.HEADER's
+*   order (VM-delimited, same column positions - column 1 is the Record ID
+*   field's own length). Used to size each DICT item's display FORMAT to
+*   match the actual fixed-width layout instead of a generic guess.
+*=============================================================================
+   LENGTHS.ROW = 12 : @VM : 192
+   LENGTHS.ROW := @VM : 1 : @VM : 15
+   LENGTHS.ROW := @VM : 42 : @VM : 42 : @VM : 28 : @VM : 2
+   LENGTHS.ROW := @VM : 10 : @VM : 2
+   LENGTHS.ROW := @VM : 42 : @VM : 42 : @VM : 28
+   LENGTHS.ROW := @VM : 2 : @VM : 10 : @VM : 2
+   LENGTHS.ROW := @VM : 8 : @VM : 14
+   LENGTHS.ROW := @VM : 1 : @VM : 8
+   LENGTHS.ROW := @VM : 2
+   LENGTHS.ROW := @VM : 4 : @VM : 8
+   LENGTHS.ROW := @VM : 4 : @VM : 8
+   LENGTHS.ROW := @VM : 4 : @VM : 8
+   LENGTHS.ROW := @VM : 42 : @VM : 1
+   LENGTHS.ROW := @VM : 42 : @VM : 28
+   LENGTHS.ROW := @VM : 2 : @VM : 9
+   FOR OFF.NO = 1 TO 6
+      LENGTHS.ROW := @VM : 4
+      LENGTHS.ROW := @VM : 1
+      LENGTHS.ROW := @VM : 42
+      LENGTHS.ROW := @VM : 42
+      LENGTHS.ROW := @VM : 28
+      LENGTHS.ROW := @VM : 2
+      LENGTHS.ROW := @VM : 9
+   NEXT OFF.NO
+   RETURN
+END

@@ -68,6 +68,8 @@ PROGRAM SD.IMPORT
    DATA.FILE = ''
    CREATE.SYNONYMS = ''
    MODE.CODE = ''
+   FORMAT.CODE = ''
+   LAYOUT.CODE = ''
 PAGE1.DISPLAY:
    CALL SR.SD.SCR.INPUT('@SD.PAGE1', 0, SCREEN.INFO, '', SCREEN.ACTION)
    PRINT @(42,7):SRC.MODE:
@@ -77,6 +79,7 @@ PAGE1.DISPLAY:
       PRINT @(42,9):SOURCE.DIR:
       PRINT @(42,11):SOURCE.NAME:
    END
+   PRINT @(42,13):FORMAT.CODE:
 
    * -------------------------------------------------------------------
    * 3. Gather run parameters
@@ -151,6 +154,28 @@ SOURCE.NAME.INPUT:
       END
    END
 
+FORMAT.CODE.RETRY:
+   PROMPT.LBL = 'Format (C/T/S/P, P=Fixed Pos) [C]'
+   FORMAT.CODE.ERROR = ''
+FORMAT.CODE.INPUT:
+   CALL SR.SD.SCR.INPUT('@VALUE', 13, FORMAT.CODE, FORMAT.CODE.ERROR, INPUT.ACTION)
+   IF INPUT.ACTION = 'END' THEN GOSUB CLEANUP.WORK ; STOP
+   ANSWER = FORMAT.CODE ; GOSUB CHECK.END
+   IF TRIM(FORMAT.CODE) = '' THEN FORMAT.CODE = 'C'
+   FORMAT.CODE = UPCASE(FORMAT.CODE)
+   IF FORMAT.CODE # 'C' AND FORMAT.CODE # 'T' AND FORMAT.CODE # 'S' AND FORMAT.CODE # 'P' THEN
+      FORMAT.CODE = ''
+      FORMAT.CODE.ERROR = 'Please enter C, T, S, or P.'
+      GOTO FORMAT.CODE.INPUT
+   END
+
+   IF FORMAT.CODE = 'P' THEN
+      GOSUB LAYOUT.SELECT
+      IF ERR.MSG NE '' THEN GOSUB CLEANUP.WORK ; STOP
+   END ELSE
+      LAYOUT.CODE = ''
+   END
+
 PAGE1.NAV:
    PROMPT.LBL = 'Enter F=Forward or END=Exit'
    PAGE.NAV.ERROR = ''
@@ -165,8 +190,16 @@ PAGE1.NAV.INPUT:
       GOTO PAGE1.NAV.INPUT
    END
 
-   * Excel conversion and the standard import CSV use comma separation.
-   DELIM = 'COMMA'
+   * Excel conversion and the standard import CSV use comma separation;
+   * fixed-position sources are read via dedicated SunBiz parsers instead.
+   BEGIN CASE
+      CASE FORMAT.CODE = 'T'
+         DELIM = 'TAB'
+      CASE FORMAT.CODE = 'S'
+         DELIM = 'SPACE'
+      CASE 1
+         DELIM = 'COMMA'
+   END CASE
 
    * -------------------------------------------------------------------
    * 4. Resolve source (Local, or Remote)
@@ -259,6 +292,11 @@ LOAD.MODE.INPUT:
    ANSWER = MODE.CODE ; GOSUB CHECK.END
    IF TRIM(MODE.CODE) = '' THEN MODE.CODE = 'F'
    IF UPCASE(MODE.CODE) = 'U' OR UPCASE(MODE.CODE) = 'UPDATE' THEN
+      IF LAYOUT.CODE NE '' THEN
+         MODE.CODE = ''
+         LOAD.MODE.ERROR = 'Fixed-position sources only support Full Load (F).'
+         GOTO LOAD.MODE.INPUT
+      END
       FILE.TYPE = FT.UPDATE
    END ELSE IF UPCASE(MODE.CODE) = 'F' OR UPCASE(MODE.CODE) = 'FULL' THEN
       FILE.TYPE = FT.FULL
@@ -288,7 +326,11 @@ PAGE3.DISPLAY:
    PRINT @(0,7):'Source: ' : SOURCE.REF:
    PRINT @(0,9):'Target: ' : DATA.FILE:
    PRINT @(0,11):'Mode: ' : FILE.TYPE:
-   PRINT @(0,13):'Dictionary conversions: none':
+   IF LAYOUT.CODE NE '' THEN
+      PRINT @(0,13):'Format: Fixed Position (' : LAYOUT.CODE : ')':
+   END ELSE
+      PRINT @(0,13):'Format: ' : DELIM:
+   END
    PRINT @(0,15):STR('-', 78):
    PROMPT.LBL = 'Enter P=Process, B=Back, or END=Exit'
    PROCEED.ERROR = ''
@@ -333,6 +375,45 @@ CONFIRM.PROCESS.INPUT:
    GOSUB CLEANUP.WORK
 
    STOP
+
+* -------------------------------------------------------------------
+* Fixed-position source: show the supported layouts and let the operator
+* pick one. Sets LAYOUT.CODE to 'CORP' or 'FIC'. 'B' returns to the format
+* prompt (FORMAT.CODE is cleared so the operator can choose again).
+* -------------------------------------------------------------------
+LAYOUT.SELECT:
+   ERR.MSG = ''
+LAYOUT.SELECT.DISPLAY:
+   CALL SR.SD.SCR.INPUT('@SD.LAYOUT.PAGE', 0, SCREEN.INFO, '', SCREEN.ACTION)
+   PROMPT.LBL = 'Enter B=Back or END=Exit'
+   LAYOUT.ERROR = ''
+LAYOUT.SELECT.INPUT:
+   CALL SR.SD.SCR.INPUT('@VALUE', 11, LAYOUT.CODE, LAYOUT.ERROR, INPUT.ACTION)
+   IF INPUT.ACTION = 'END' THEN
+      GOSUB CLEANUP.WORK
+      ERR.MSG = 'Import cancelled by user.'
+      RETURN
+   END
+   ANSWER = LAYOUT.CODE
+   IF UPCASE(TRIM(LAYOUT.CODE)) = 'END' THEN
+      GOSUB CLEANUP.WORK
+      ERR.MSG = 'Import cancelled by user.'
+      RETURN
+   END
+   IF UPCASE(TRIM(LAYOUT.CODE)) = 'B' OR UPCASE(TRIM(LAYOUT.CODE)) = 'BACK' THEN
+      LAYOUT.CODE = ''
+      FORMAT.CODE = ''
+      GOTO PAGE1.DISPLAY
+   END
+   LAYOUT.CODE = UPCASE(TRIM(LAYOUT.CODE))
+   IF LAYOUT.CODE = 'C' THEN LAYOUT.CODE = 'CORP'
+   IF LAYOUT.CODE = 'F' THEN LAYOUT.CODE = 'FIC'
+   IF LAYOUT.CODE # 'CORP' AND LAYOUT.CODE # 'FIC' THEN
+      LAYOUT.CODE = ''
+      LAYOUT.ERROR = 'Please enter C (Corp) or F (Fictitious Name).'
+      GOTO LAYOUT.SELECT.INPUT
+   END
+RETURN
 
 * -------------------------------------------------------------------
 * Shared prompt guard: typing 'End' at any question exits the program.
@@ -709,7 +790,7 @@ IMPORT.CURRENT.SOURCE:
          CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
          RETURN
       END ELSE
-         CALL SR.DATA.PARSE(REPORT.PATH, DELIM, REPORT.HEADER, REPORT.ROWS, REPORT.COUNT, ERR.MSG)
+         CALL SR.DATA.PARSE.MV(REPORT.PATH, DELIM, '', REPORT.HEADER, REPORT.ROWS, REPORT.COUNT, ERR.MSG)
          IF ERR.MSG NE '' THEN
             ERR.MSG = 'UPDATE STOPPED: diff report unreadable; no records were changed. ' : ERR.MSG
             CALL SR.IMPORT.LOG(ERR.MSG, RUN.LOG.PATH)
@@ -739,13 +820,37 @@ IMPORT.CURRENT.SOURCE:
       END
    END
 
+   STREAM.LAYOUT = 0
    IF NOT(USE.DIFF) THEN
-      CALL SR.DATA.PARSE(SOURCE.PATH, DELIM, HEADER.ROW, DATA.ROWS, ROW.COUNT, ERR.MSG)
+      * CSV/delimited exports are parsed directly by MV BASIC. Fixed-position
+      * SunBiz sources are streamed (read one line, write one record) further
+      * below instead of being loaded into memory up front - their column
+      * list is static, so it can be fetched without touching the file.
+      * Python remains used by SR.FILE.FETCH only when an Excel workbook or
+      * remote source needs preparing.
+      BEGIN CASE
+         CASE LAYOUT.CODE = 'CORP'
+            CALL SR.SUNBIZ.CORP.HEADER(HEADER.ROW)
+            STREAM.LAYOUT = 1
+         CASE LAYOUT.CODE = 'FIC'
+            CALL SR.SUNBIZ.FIC.HEADER(HEADER.ROW)
+            STREAM.LAYOUT = 1
+         CASE 1
+            CALL SR.DATA.PARSE.MV(SOURCE.PATH, DELIM, '', HEADER.ROW, DATA.ROWS, ROW.COUNT, ERR.MSG)
+      END CASE
       IF ERR.MSG NE '' THEN
          ERR.MSG = 'PARSE FAILED: ' : ERR.MSG
          RETURN
       END
-      CALL SR.IMPORT.LOG('Source records: ' : ROW.COUNT : ' | Columns: ' : DCOUNT(HEADER.ROW, @VM) : ' | Mode: full load', RUN.LOG.PATH)
+      IF NOT(STREAM.LAYOUT) THEN
+         CALL SR.IMPORT.LOG('Source records: ' : ROW.COUNT : ' | Columns: ' : DCOUNT(HEADER.ROW, @VM) : ' | Mode: full load', RUN.LOG.PATH)
+      END ELSE
+         * Cheap line count (no parsing, O(1) memory) so progress can show
+         * '(done/total)' instead of just a running count.
+         EXECUTE '!wc -l < "' : SOURCE.PATH : '" 2>/dev/null' CAPTURING WC.OUT
+         TOTAL.LINES = TRIM(WC.OUT<1>)
+         IF NOT(TOTAL.LINES MATCHES '1N0N') THEN TOTAL.LINES = 0
+      END
    END
 
    * A completed earlier load leaves a control item. If that target can no
@@ -773,7 +878,14 @@ IMPORT.CURRENT.SOURCE:
    END
 
    NEXT.ATTR = DATA.START.ATTR
-   CALL SR.DICT.BUILD(DATA.FILE, HEADER.ROW, NEXT.ATTR, ERR.MSG)
+   BEGIN CASE
+      CASE LAYOUT.CODE = 'CORP'
+         CALL SR.SUNBIZ.CORP.DICT.BUILD(DATA.FILE, NEXT.ATTR, ERR.MSG)
+      CASE LAYOUT.CODE = 'FIC'
+         CALL SR.SUNBIZ.FIC.DICT.BUILD(DATA.FILE, NEXT.ATTR, ERR.MSG)
+      CASE 1
+         CALL SR.DICT.BUILD(DATA.FILE, HEADER.ROW, NEXT.ATTR, ERR.MSG)
+   END CASE
    IF ERR.MSG NE '' THEN
       CLOSE F.DATA
       ERR.MSG = 'DICT BUILD FAILED: ' : ERR.MSG
@@ -786,6 +898,19 @@ IMPORT.CURRENT.SOURCE:
    SKIPPED.COUNT = 0
    DELETED.COUNT = 0
    WRITE.ERROR.COUNT = 0
+   DUP.COUNT     = 0
+
+   * Unique per run; stamped onto each written record (reserved metadata
+   * attr) so a second write to the same Record ID within THIS run can be
+   * told apart from a normal overwrite of an older record from a prior
+   * day's load.
+   RUN.STAMP = OCONV(DATE(), 'D4/') : ' ' : OCONV(TIME(), 'MTS') : '.' : RND(999999)
+
+   * Single in-place status line; overwritten (not scrolled) as batches
+   * complete, starting immediately so the operator sees it before the
+   * first batch finishes.
+   PROGRESS.ROW = 22
+   PRINT @(0, PROGRESS.ROW):@(-3):'Please wait... Import in progress...':
 
    IF USE.DIFF THEN
       NEW.COUNT     = ADDED.CNT
@@ -816,13 +941,99 @@ IMPORT.CURRENT.SOURCE:
             CALL SR.IMPORT.LOG('WRITE FAILED (row ' : ROW.NO : ', REC.ID=' : REC.ID : ')', RUN.LOG.PATH)
          END
       NEXT ROW.NO
+   END ELSE IF STREAM.LAYOUT THEN
+      * Fixed-position: read one line, build one record, write it - never
+      * hold the whole file (which can be huge for SunBiz bulk downloads)
+      * in memory at once.
+      OPENSEQ SOURCE.PATH TO F.STREAM.SOURCE ELSE
+         ERR.MSG = 'Cannot open fixed-position source: ' : SOURCE.PATH
+         RETURN
+      END
+      ROW.NO = 0
+      PROGRESS.EVERY = 10000
+      SKIP.COUNT = 0
+      BEGIN CASE
+         CASE LAYOUT.CODE = 'CORP'
+            EXPECTED.LEN = 1440
+         CASE LAYOUT.CODE = 'FIC'
+            EXPECTED.LEN = 2098
+      END CASE
+STREAM.READ.NEXT:
+      READSEQ STREAM.LINE FROM F.STREAM.SOURCE ELSE GOTO STREAM.CLOSE
+      IF TRIM(STREAM.LINE) = '' THEN
+         SKIP.COUNT += 1
+         GOTO STREAM.READ.NEXT
+      END
+      IF LEN(STREAM.LINE) < EXPECTED.LEN THEN
+         SKIP.COUNT += 1
+         CALL SR.IMPORT.LOG('SKIPPED non-data line (length=' : LEN(STREAM.LINE) : ', expected ' : EXPECTED.LEN : '): ' : STREAM.LINE[1, 80], RUN.LOG.PATH)
+         GOTO STREAM.READ.NEXT
+      END
+      ROW.NO += 1
+      IF MOD(ROW.NO, PROGRESS.EVERY) = 0 THEN
+         BATCH.NO = ROW.NO / PROGRESS.EVERY
+         PRINT @(0, PROGRESS.ROW):@(-3):'Please wait... Batch ' : BATCH.NO : ' | Import (' : ROW.NO : '/' : TOTAL.LINES : ') completed':
+      END
+
+      BEGIN CASE
+         CASE LAYOUT.CODE = 'CORP'
+            CALL SR.SUNBIZ.CORP.ROW(STREAM.LINE, ROW)
+         CASE LAYOUT.CODE = 'FIC'
+            CALL SR.SUNBIZ.FIC.ROW(STREAM.LINE, ROW)
+      END CASE
+      IF ROW<1, 1> = '' THEN GOTO STREAM.READ.NEXT
+
+      CALL SR.RECORD.BUILD(ROW, DATA.START.ATTR, REC.ID, NEW.REC, BUILD.ERR)
+      IF BUILD.ERR NE '' THEN GOTO STREAM.READ.NEXT
+
+      * Same-run duplicate check: only a match on THIS run's stamp means a
+      * genuine collision (two source rows resolved to the same Record ID
+      * after SR.RECORD.BUILD's TRIM/space-to-hyphen cleanup); a match with
+      * an older stamp is just a normal overwrite of a prior day's record.
+      DUP.FOUND = 0
+      READ EXISTING.REC FROM F.DATA, REC.ID THEN
+         IF EXISTING.REC<DATA.RUN.STAMP.ATTR> = RUN.STAMP THEN
+            DUP.FOUND = 1
+            DUP.COUNT += 1
+            CALL SR.IMPORT.LOG('DUPLICATE REC.ID within this run (row ' : ROW.NO : ', REC.ID=' : REC.ID : '): ' : STREAM.LINE[1, 80], RUN.LOG.PATH)
+         END
+      END
+      NEW.REC<DATA.RUN.STAMP.ATTR> = RUN.STAMP
+
+      WRITE.OK = 1
+      WRITE NEW.REC TO F.DATA, REC.ID ON ERROR WRITE.OK = 0
+      IF WRITE.OK = 0 THEN
+         WRITE.ERROR.COUNT += 1
+         CALL SR.IMPORT.LOG('WRITE FAILED (row ' : ROW.NO : ', REC.ID=' : REC.ID : ')', RUN.LOG.PATH)
+         GOTO STREAM.READ.NEXT
+      END
+      NEW.COUNT += 1
+      GOTO STREAM.READ.NEXT
+
+STREAM.CLOSE:
+      CLOSESEQ F.STREAM.SOURCE
+      ROW.COUNT = ROW.NO
+      CALL SR.IMPORT.LOG('Source records: ' : ROW.COUNT : ' | Columns: ' : DCOUNT(HEADER.ROW, @VM) : ' | Mode: full load (streamed) | Skipped non-data lines: ' : SKIP.COUNT, RUN.LOG.PATH)
+      IF DUP.COUNT > 0 THEN
+         CALL SR.IMPORT.LOG('WARNING: ' : DUP.COUNT : ' duplicate Record ID(s) overwritten within this run - see DUPLICATE lines above', RUN.LOG.PATH)
+      END
    END ELSE
       NUM.ROWS = DCOUNT(DATA.ROWS, @FM)
+      PROGRESS.EVERY = 10000
 
       FOR ROW.NO = 1 TO NUM.ROWS
          ROW = DATA.ROWS<ROW.NO>
          CALL SR.RECORD.BUILD(ROW, DATA.START.ATTR, REC.ID, NEW.REC, BUILD.ERR)
          IF BUILD.ERR NE '' THEN CONTINUE
+
+         READ EXISTING.REC FROM F.DATA, REC.ID THEN
+            IF EXISTING.REC<DATA.RUN.STAMP.ATTR> = RUN.STAMP THEN
+               DUP.COUNT += 1
+               CALL SR.IMPORT.LOG('DUPLICATE REC.ID within this run (row ' : ROW.NO : ', REC.ID=' : REC.ID : ')', RUN.LOG.PATH)
+            END
+         END
+         NEW.REC<DATA.RUN.STAMP.ATTR> = RUN.STAMP
+
          WRITE.OK = 1
          WRITE NEW.REC TO F.DATA, REC.ID ON ERROR WRITE.OK = 0
          IF WRITE.OK = 0 THEN
@@ -831,7 +1042,14 @@ IMPORT.CURRENT.SOURCE:
             CONTINUE
          END
          NEW.COUNT += 1
+         IF MOD(ROW.NO, PROGRESS.EVERY) = 0 THEN
+            BATCH.NO = ROW.NO / PROGRESS.EVERY
+            PRINT @(0, PROGRESS.ROW):@(-3):'Please wait... Batch ' : BATCH.NO : ' | Import (' : ROW.NO : '/' : NUM.ROWS : ') completed':
+         END
       NEXT ROW.NO
+      IF DUP.COUNT > 0 THEN
+         CALL SR.IMPORT.LOG('WARNING: ' : DUP.COUNT : ' duplicate Record ID(s) overwritten within this run - see DUPLICATE lines above', RUN.LOG.PATH)
+      END
    END
 
    IF WRITE.ERROR.COUNT > 0 THEN
@@ -849,12 +1067,13 @@ IMPORT.CURRENT.SOURCE:
    STORED.PATH = STORED.DIR : '/' : STORED.NAME
    CALL SR.IMPORT.LOG('Source archive copy: ' : STORED.PATH, RUN.LOG.PATH)
 
-   CALL SR.IMPORT.LOG('Import results | Added: ' : NEW.COUNT : ' | Updated: ' : CHANGED.COUNT : ' | Unchanged: ' : SKIPPED.COUNT : ' | Deleted: ' : DELETED.COUNT : ' | Errors: ' : WRITE.ERROR.COUNT, RUN.LOG.PATH)
+   CALL SR.IMPORT.LOG('Import results | Added: ' : NEW.COUNT : ' | Updated: ' : CHANGED.COUNT : ' | Unchanged: ' : SKIPPED.COUNT : ' | Deleted: ' : DELETED.COUNT : ' | Errors: ' : WRITE.ERROR.COUNT : ' | Duplicates: ' : DUP.COUNT, RUN.LOG.PATH)
    CALL SR.IMPORT.LOG('------------- IMPORT COMPLETED -------------', RUN.LOG.PATH)
 
    RESULT.LINE = '  Result : New=' : NEW.COUNT : '  Changed=' : CHANGED.COUNT : '  Skipped=' : SKIPPED.COUNT
    IF DELETED.COUNT > 0 THEN RESULT.LINE := '  Deleted=' : DELETED.COUNT
    IF WRITE.ERROR.COUNT > 0 THEN RESULT.LINE := '  Errors=' : WRITE.ERROR.COUNT
+   IF DUP.COUNT > 0 THEN RESULT.LINE := '  Duplicates=' : DUP.COUNT
    CRT RESULT.LINE
 
    CTRL.DIFF.PATH = ''

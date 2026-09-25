@@ -1,0 +1,34 @@
+SUBROUTINE SR.SUNBIZ.FIC.HEADER(HEADER.ROW)
+*=============================================================================
+* SR.SUNBIZ.FIC.HEADER
+*
+* Purpose:
+*   Returns the static column-name list for the SunBiz Fictitious Name Data
+*   File layout (VM-delimited, spaces preserved), ready for SR.DICT.BUILD.
+*   Column 1 is the Record ID (Document Number); does not touch any file, so
+*   it can be called before the source file is opened - needed for the
+*   streaming read/write path in SD.IMPORT.
+*=============================================================================
+   $CATALOGUE
+
+   HEADER.ROW = 'Document Number' : @VM : 'Fictitious Name' : @VM : 'County' : @VM
+   HEADER.ROW := 'Address 1' : @VM : 'Address 2' : @VM : 'City' : @VM : 'State' : @VM
+   HEADER.ROW := 'Zip' : @VM : 'Country' : @VM : 'Filing Date' : @VM
+   HEADER.ROW := 'Number of Pages Filed' : @VM : 'Status' : @VM
+   HEADER.ROW := 'Cancelation Date' : @VM : 'Expiration Date' : @VM
+   HEADER.ROW := 'Number of Owners' : @VM : 'FEI Number' : @VM
+   HEADER.ROW := 'More than ten Owners Flag'
+   FOR OWN.NO = 1 TO 10
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Document Number'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Name'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Name Format'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Address'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' City'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' State'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Zip'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Country'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' FEI Number'
+      HEADER.ROW := @VM : 'Owner ' : OWN.NO : ' Charter Number'
+   NEXT OWN.NO
+   RETURN
+END

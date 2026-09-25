@@ -1,0 +1,203 @@
+*=============================================================================
+* FL.SUNBIZ.CORP.DATA
+*
+* Fixed-width column layout equates for the Florida SunBiz "Corporate Data
+* File" (record length 1440 characters; data rows have NO header row).
+* Source: FL-SunBiz-Corp+AltName-File-Layout.xlsx, sheet 'SunBiz-Corporate'.
+*
+* OpenQM's EQU statement parses an unquoted comma in the value as starting
+* a NEW 'name TO value' pair (EQU name TO value [, name TO value ...]), so
+* a single 'start,length' value per field does not compile. Each field is
+* therefore two scalar equates, .POS and .LEN, used together:
+*   LINE[CORPORATION.NAME.POS, CORPORATION.NAME.LEN]   ->   LINE[13, 192]
+*
+* Naming rule: the equate token is the layout's Field Name with spaces
+* replaced by '.' (BASIC identifiers cannot contain '-'). The DICT item
+* name for each field is the same Field Name with spaces replaced by '-'
+* instead - i.e. derived from the equate token by swapping '.' for '-'.
+* Exception: 'Zip+4' fields use '.' in place of '+' too (not a space, but
+* '+' is likewise illegal in a BASIC token); use 'ZIP+4' literally for the
+* DICT name for those fields.
+*
+* Duplicate 'Filler' fields in the source layout are numbered FILLER.1..4
+* to keep equate tokens unique; use 'FILLER' (unnumbered) as their DICT name
+* if a placeholder DICT item is ever needed.
+*
+* Contains fields for up to 6 officers, starting at field 37; each officer
+* block repeats the same 7 sub-fields (Title/Type/Name/Address/City/State/
+* Zip+4).
+*=============================================================================
+
+EQU CORPORATION.NUMBER.POS       TO 1
+EQU CORPORATION.NUMBER.LEN       TO 12
+EQU CORPORATION.NAME.POS         TO 13
+EQU CORPORATION.NAME.LEN         TO 192
+EQU STATUS.POS                   TO 205
+EQU STATUS.LEN                   TO 1
+EQU FILING.TYPE.POS              TO 206
+EQU FILING.TYPE.LEN              TO 15
+EQU ADDRESS.1.POS                TO 221
+EQU ADDRESS.1.LEN                TO 42
+EQU ADDRESS.2.POS                TO 263
+EQU ADDRESS.2.LEN                TO 42
+EQU CITY.POS                     TO 305
+EQU CITY.LEN                     TO 28
+EQU STATE.POS                    TO 333
+EQU STATE.LEN                    TO 2
+EQU ZIP.POS                      TO 335
+EQU ZIP.LEN                      TO 10
+EQU COUNTRY.POS                  TO 345
+EQU COUNTRY.LEN                  TO 2
+EQU MAIL.ADDRESS.1.POS           TO 347
+EQU MAIL.ADDRESS.1.LEN           TO 42
+EQU MAIL.ADDRESS.2.POS           TO 389
+EQU MAIL.ADDRESS.2.LEN           TO 42
+EQU MAIL.CITY.POS                TO 431
+EQU MAIL.CITY.LEN                TO 28
+EQU MAIL.STATE.POS               TO 459
+EQU MAIL.STATE.LEN               TO 2
+EQU MAIL.ZIP.POS                 TO 461
+EQU MAIL.ZIP.LEN                 TO 10
+EQU MAIL.COUNTRY.POS             TO 471
+EQU MAIL.COUNTRY.LEN             TO 2
+EQU FILE.DATE.POS                TO 473
+EQU FILE.DATE.LEN                TO 8
+EQU FEI.NUMBER.POS               TO 481
+EQU FEI.NUMBER.LEN               TO 14
+EQU MORE.THAN.SIX.OFFICERS.FLAG.POS TO 495
+EQU MORE.THAN.SIX.OFFICERS.FLAG.LEN TO 1
+EQU LAST.TRANSACTION.DATE.POS    TO 496
+EQU LAST.TRANSACTION.DATE.LEN    TO 8
+EQU STATE.COUNTRY.POS            TO 504
+EQU STATE.COUNTRY.LEN            TO 2
+EQU REPORT.YEAR.1.POS            TO 506
+EQU REPORT.YEAR.1.LEN            TO 4
+EQU FILLER.1.POS                 TO 510
+EQU FILLER.1.LEN                 TO 1
+EQU REPORT.DATE.1.POS            TO 511
+EQU REPORT.DATE.1.LEN            TO 8
+EQU REPORT.YEAR.2.POS            TO 519
+EQU REPORT.YEAR.2.LEN            TO 4
+EQU FILLER.2.POS                 TO 523
+EQU FILLER.2.LEN                 TO 1
+EQU REPORT.DATE.2.POS            TO 524
+EQU REPORT.DATE.2.LEN            TO 8
+EQU REPORT.YEAR.3.POS            TO 532
+EQU REPORT.YEAR.3.LEN            TO 4
+EQU FILLER.3.POS                 TO 536
+EQU FILLER.3.LEN                 TO 1
+EQU REPORT.DATE.3.POS            TO 537
+EQU REPORT.DATE.3.LEN            TO 8
+EQU REGISTERED.AGENT.NAME.POS    TO 545
+EQU REGISTERED.AGENT.NAME.LEN    TO 42
+EQU REGISTERED.AGENT.TYPE.POS    TO 587
+EQU REGISTERED.AGENT.TYPE.LEN    TO 1
+EQU REGISTERED.AGENT.ADDRESS.POS TO 588
+EQU REGISTERED.AGENT.ADDRESS.LEN TO 42
+EQU REGISTERED.AGENT.CITY.POS    TO 630
+EQU REGISTERED.AGENT.CITY.LEN    TO 28
+EQU REGISTERED.AGENT.STATE.POS   TO 658
+EQU REGISTERED.AGENT.STATE.LEN   TO 2
+EQU REGISTERED.AGENT.ZIP.4.POS   TO 660
+EQU REGISTERED.AGENT.ZIP.4.LEN   TO 9
+
+* --- Officer 1 ------------------------------------------------------------
+EQU OFFICER.1.TITLE.POS          TO 669
+EQU OFFICER.1.TITLE.LEN          TO 4
+EQU OFFICER.1.TYPE.POS           TO 673
+EQU OFFICER.1.TYPE.LEN           TO 1
+EQU OFFICER.1.NAME.POS           TO 674
+EQU OFFICER.1.NAME.LEN           TO 42
+EQU OFFICER.1.ADDRESS.POS        TO 716
+EQU OFFICER.1.ADDRESS.LEN        TO 42
+EQU OFFICER.1.CITY.POS           TO 758
+EQU OFFICER.1.CITY.LEN           TO 28
+EQU OFFICER.1.STATE.POS          TO 786
+EQU OFFICER.1.STATE.LEN          TO 2
+EQU OFFICER.1.ZIP.4.POS          TO 788
+EQU OFFICER.1.ZIP.4.LEN          TO 9
+
+* --- Officer 2 ------------------------------------------------------------
+EQU OFFICER.2.TITLE.POS          TO 797
+EQU OFFICER.2.TITLE.LEN          TO 4
+EQU OFFICER.2.TYPE.POS           TO 801
+EQU OFFICER.2.TYPE.LEN           TO 1
+EQU OFFICER.2.NAME.POS           TO 802
+EQU OFFICER.2.NAME.LEN           TO 42
+EQU OFFICER.2.ADDRESS.POS        TO 844
+EQU OFFICER.2.ADDRESS.LEN        TO 42
+EQU OFFICER.2.CITY.POS           TO 886
+EQU OFFICER.2.CITY.LEN           TO 28
+EQU OFFICER.2.STATE.POS          TO 914
+EQU OFFICER.2.STATE.LEN          TO 2
+EQU OFFICER.2.ZIP.4.POS          TO 916
+EQU OFFICER.2.ZIP.4.LEN          TO 9
+
+* --- Officer 3 ------------------------------------------------------------
+EQU OFFICER.3.TITLE.POS          TO 925
+EQU OFFICER.3.TITLE.LEN          TO 4
+EQU OFFICER.3.TYPE.POS           TO 929
+EQU OFFICER.3.TYPE.LEN           TO 1
+EQU OFFICER.3.NAME.POS           TO 930
+EQU OFFICER.3.NAME.LEN           TO 42
+EQU OFFICER.3.ADDRESS.POS        TO 972
+EQU OFFICER.3.ADDRESS.LEN        TO 42
+EQU OFFICER.3.CITY.POS           TO 1014
+EQU OFFICER.3.CITY.LEN           TO 28
+EQU OFFICER.3.STATE.POS          TO 1042
+EQU OFFICER.3.STATE.LEN          TO 2
+EQU OFFICER.3.ZIP.4.POS          TO 1044
+EQU OFFICER.3.ZIP.4.LEN          TO 9
+
+* --- Officer 4 ------------------------------------------------------------
+EQU OFFICER.4.TITLE.POS          TO 1053
+EQU OFFICER.4.TITLE.LEN          TO 4
+EQU OFFICER.4.TYPE.POS           TO 1057
+EQU OFFICER.4.TYPE.LEN           TO 1
+EQU OFFICER.4.NAME.POS           TO 1058
+EQU OFFICER.4.NAME.LEN           TO 42
+EQU OFFICER.4.ADDRESS.POS        TO 1100
+EQU OFFICER.4.ADDRESS.LEN        TO 42
+EQU OFFICER.4.CITY.POS           TO 1142
+EQU OFFICER.4.CITY.LEN           TO 28
+EQU OFFICER.4.STATE.POS          TO 1170
+EQU OFFICER.4.STATE.LEN          TO 2
+EQU OFFICER.4.ZIP.4.POS          TO 1172
+EQU OFFICER.4.ZIP.4.LEN          TO 9
+
+* --- Officer 5 ------------------------------------------------------------
+EQU OFFICER.5.TITLE.POS          TO 1181
+EQU OFFICER.5.TITLE.LEN          TO 4
+EQU OFFICER.5.TYPE.POS           TO 1185
+EQU OFFICER.5.TYPE.LEN           TO 1
+EQU OFFICER.5.NAME.POS           TO 1186
+EQU OFFICER.5.NAME.LEN           TO 42
+EQU OFFICER.5.ADDRESS.POS        TO 1228
+EQU OFFICER.5.ADDRESS.LEN        TO 42
+EQU OFFICER.5.CITY.POS           TO 1270
+EQU OFFICER.5.CITY.LEN           TO 28
+EQU OFFICER.5.STATE.POS          TO 1298
+EQU OFFICER.5.STATE.LEN          TO 2
+EQU OFFICER.5.ZIP.4.POS          TO 1300
+EQU OFFICER.5.ZIP.4.LEN          TO 9
+
+* --- Officer 6 ------------------------------------------------------------
+EQU OFFICER.6.TITLE.POS          TO 1309
+EQU OFFICER.6.TITLE.LEN          TO 4
+EQU OFFICER.6.TYPE.POS           TO 1313
+EQU OFFICER.6.TYPE.LEN           TO 1
+EQU OFFICER.6.NAME.POS           TO 1314
+EQU OFFICER.6.NAME.LEN           TO 42
+EQU OFFICER.6.ADDRESS.POS        TO 1356
+EQU OFFICER.6.ADDRESS.LEN        TO 42
+EQU OFFICER.6.CITY.POS           TO 1398
+EQU OFFICER.6.CITY.LEN           TO 28
+EQU OFFICER.6.STATE.POS          TO 1426
+EQU OFFICER.6.STATE.LEN          TO 2
+EQU OFFICER.6.ZIP.4.POS          TO 1428
+EQU OFFICER.6.ZIP.4.LEN          TO 9
+
+EQU FILLER.4.POS                 TO 1437
+EQU FILLER.4.LEN                 TO 4
+
+EQU CORP.RECORD.LENGTH           TO 1440

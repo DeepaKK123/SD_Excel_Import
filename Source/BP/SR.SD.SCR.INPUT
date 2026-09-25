@@ -60,7 +60,23 @@ SUBROUTINE SR.SD.SCR.INPUT(FIELD.LABEL, FIELD.ROW, FIELD.VALUE, ERROR.MESSAGE, A
       PRINT @(0,7):'Source mode (Local=L, Remote=R) [L]':
       PRINT @(0,9):'Source directory / remote file name':
       PRINT @(0,11):'Source file name':
+      PRINT @(0,13):'Format (C/T/S/P, P=Fixed Pos) [C]':
       PRINT @(0,20):'Enter F=Forward or END=Exit':
+      RETURN
+   END
+
+   IF FIELD.LABEL = '@SD.LAYOUT.PAGE' THEN
+      CRT @(-1)
+      PRINT @(0,0):'Account : ':FIELD.VALUE<1>:
+      PRINT @(31,0):'User : ':FIELD.VALUE<2>:
+      PRINT @(57,0):'Date/Time : ':OCONV(DATE(), 'D2/'):
+      PRINT @(20,2):'SD Import - Fixed Position Layout Selection':
+      PRINT @(0,3):STR('-', 78):
+      PRINT @(0,5):'Supported fixed-position formats:':
+      PRINT @(0,7):'[C] SunBiz Corporate Data File':
+      PRINT @(0,8):'[F] SunBiz Fictitious Name (Alt Name) Data File':
+      PRINT @(0,11):'Select layout (C/F)':
+      PRINT @(0,20):'Enter B=Back or END=Exit':
       RETURN
    END
 

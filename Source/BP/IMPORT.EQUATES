@@ -10,6 +10,8 @@
 * --- Data record layout -----------------------------------------------
 EQU DATA.RESERVED.ATTRS  TO 10      ; * Attrs 1-10 reserved for metadata
 EQU DATA.START.ATTR      TO 11      ; * First column (Col B) lands here
+EQU DATA.RUN.STAMP.ATTR  TO 1       ; * Last write's run stamp - used to detect
+                                    ; * same-run duplicate Record IDs
 
 * --- Control record layout ----------------------------------------------
 EQU CTRL.RESERVED.ATTRS  TO 10      ; * Attrs 1-10 reserved for metadata

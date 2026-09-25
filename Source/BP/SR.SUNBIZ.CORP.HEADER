@@ -1,0 +1,39 @@
+SUBROUTINE SR.SUNBIZ.CORP.HEADER(HEADER.ROW)
+*=============================================================================
+* SR.SUNBIZ.CORP.HEADER
+*
+* Purpose:
+*   Returns the static column-name list for the SunBiz Corporate Data File
+*   layout (VM-delimited, spaces preserved), ready for SR.DICT.BUILD. Column
+*   1 is the Record ID (Corporation Number); does not touch any file, so it
+*   can be called before the source file is opened - needed for the
+*   streaming read/write path in SD.IMPORT.
+*=============================================================================
+   $CATALOGUE
+
+   HEADER.ROW = 'Corporation Number' : @VM : 'Corporation Name' : @VM
+   HEADER.ROW := 'Status' : @VM : 'Filing Type' : @VM
+   HEADER.ROW := 'Address 1' : @VM : 'Address 2' : @VM : 'City' : @VM : 'State' : @VM
+   HEADER.ROW := 'Zip' : @VM : 'Country' : @VM
+   HEADER.ROW := 'Mail Address 1' : @VM : 'Mail Address 2' : @VM : 'Mail City' : @VM
+   HEADER.ROW := 'Mail State' : @VM : 'Mail Zip' : @VM : 'Mail Country' : @VM
+   HEADER.ROW := 'File Date' : @VM : 'FEI Number' : @VM
+   HEADER.ROW := 'More than six Officers flag' : @VM : 'Last Transaction Date' : @VM
+   HEADER.ROW := 'State Country' : @VM
+   HEADER.ROW := 'Report Year 1' : @VM : 'Report Date 1' : @VM
+   HEADER.ROW := 'Report Year 2' : @VM : 'Report Date 2' : @VM
+   HEADER.ROW := 'Report Year 3' : @VM : 'Report Date 3' : @VM
+   HEADER.ROW := 'Registered Agent Name' : @VM : 'Registered Agent Type' : @VM
+   HEADER.ROW := 'Registered Agent Address' : @VM : 'Registered Agent City' : @VM
+   HEADER.ROW := 'Registered Agent State' : @VM : 'Registered Agent Zip+4'
+   FOR OFF.NO = 1 TO 6
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' Title'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' Type'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' Name'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' Address'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' City'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' State'
+      HEADER.ROW := @VM : 'Officer ' : OFF.NO : ' Zip+4'
+   NEXT OFF.NO
+   RETURN
+END
